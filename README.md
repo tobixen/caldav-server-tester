@@ -1,4 +1,7 @@
 # caldav-server-tester
+
+**UPDATE 2024-11-18**: I had forgotten completely about this repository.  I'm working on a checker now in the python-caldav library - but it should probably be released as a stand-alone tool.
+
 A planned tool to check how well a caldav server adheres to the caldav standard(s)
 
 Currently there is no code here, this is just sort of a placeholder for a future project.  It is on my todo-list to create this tool, though said list is rather long.
@@ -23,7 +26,7 @@ As time grew and the test code for the caldav library got more and more bloated,
 ## Ideas for design, usability, implementation, etc
 
 * It should be possible to run it as a stand-alone command-line script.
-* It should be able to read connection details both from command-line options, .config/calendar.conf (plann/calendar_cli) as well as caldav/tests/conf_private.py
+* It should be able to read connection details both from command-line options, `.config/calendar.conf` (as read by `plann`/`calendar_cli`) as well as `caldav/tests/conf_private.py`
 * It should be possible to get the output in json-format
 * Output should be compatible with the list in caldav/tests/compatibility_issues.py (but said file may need some editing - and eventually I'd like to move it out of the test directory and make it part of the libary).
 * Some of the items in compatibility_issues.py affects the possibility to run tests at all.  In the typical test in the python caldav library I'm creating a calendar, populating it with some known input and then doing queries.  It's needed to be relatively clever so that we can test whatever search queries that can be tested even towards a read-only calendar with arbitrary contents.
