@@ -17,9 +17,9 @@ from caldav.lib.error import DAVError
 from caldav.lib.error import NotFoundError
 from caldav.lib.python_utilities import to_local
 from caldav.objects import FreeBusy
-from tests.compatibility_issues import incompatibility_description
-from tests.conf import client
-from tests.conf import CONNKEYS
+from caldav.compatibility_hints import incompatibility_description
+from caldav.davclient import auto_conn
+from caldav.davclient import CONNKEYS
 
 ical_with_exception1 = """BEGIN:VCALENDAR
 VERSION:2.0
@@ -995,14 +995,18 @@ def _set_conn_options(func):
 
 @click.command()
 @_set_conn_options
-@click.option(
-    "--idx", type=int, help="Choose a server from the test config, by index number"
-)
+@click.option("--name", type=str, help="Choose a server by name", default=None)
 @click.option("--verbose/--quiet", default=None, help="More output")
 @click.option("--json/--text", help="JSON output.  Overrides verbose")
-def check_server_compatibility(verbose, json, **kwargs):
+def check_server_compatibility(verbose, json, name, **kwargs):
     click.echo("WARNING: this script is not production-ready")
-    conn = client(**kwargs)
+
+    ## Remove empty keys
+    kwargs_ = {}
+    for x in kwargs:
+        if kwargs[x]:
+            kwargs_ = kwargs[x]
+    conn = auto_conn(name=name, configfile=False, testconfig=True, environment=False, config_data=kwargs_)
     obj = ServerQuirkChecker(conn)
     obj.check_all()
     obj.report(verbose=verbose, json=json)

@@ -1,5 +1,7 @@
 # caldav-server-tester
 
+**UPDATE 2025-05-15**: Server checker script has been moved from the caldav library and here.  I got it to work, but it requires the python caldav library version 1.5 or higher - and as of today, it's not released yet.
+
 **UPDATE 2024-11-18**: I had forgotten completely about this repository.  I'm working on a checker now in the python-caldav library - but it should probably be released as a stand-alone tool.
 
 A planned tool to check how well a caldav server adheres to the caldav standard(s)
