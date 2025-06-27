@@ -2,6 +2,8 @@
 
 This document may not be internally consistent, as it was created as part of my thought process.
 
+I'm slowly turning from negative language (`no_xxx`, `compatibility_issues`, etc) to positive language (`feature xxx`, `compatibility_hints`, etc)
+
 ## Current status and experiences
 
 As of 2025-05, we have a flat list of boolean compatibility flags.  It does not work out very well:
@@ -59,27 +61,61 @@ Here are most of the flags as of 2025-05-15:
 
 The nice thing with structured dicts is that they may easily be expanded over time, one doesn't need to think up everything from the very start.
 
-There should also be a feature definition list - and probably a feature definition class/object as well.
+Here is how configuration could look like on a server where we would like to rate-limit requests, where it may take 10 seconds from a change is done until it's reflected in search results, where it's needed to clean up calendar after each test run, where deletion of calendars causes a 500 internal server error, and where expanded search doesn't work.  The latter has been addressed in an issue on the fancypancyserver github:
 
 ```
-server_features = {
+fancypancyserver_tweaks = {
     "rate_limit": {
 	    "enable": True,
-		"rate": "10/100s"
+		"interval": 100,
+		"count": 10,
     },
-	"search_delay": {
-	    "enable": True,
+	"search_cache": {
+	    "behaviour": "delay",
 		"delay": 10
 	},
-	"cleanup_calendar": {
+	"tests_cleanup_calendar": {
        "enable": True
     },
 	"delete_calendar": {
-	    "behaviour": "ungraceful"
+	    "support": "ungraceful"
 	},
 	"expanded_search": {
-	    "behaviour": "unsupported"
+	    "support": "unsupported",
+		"links": ["https://github.com/fancy/pancyserver/issues/123"]
 	},
 	...
 }
 ```
+
+There should also be a feature definition list.  It may look somehow like this:
+
+```
+compability_features = {
+  "rate_limit": {
+    "type": "client-feature",
+	"description": "client must not send requests too fast",
+	"extra_keys": {
+	    "interval": "Rate limiting window, in seconds",
+		"count": "Max number of requests to send within the interval",
+	},
+	"search_cache": {
+	    "type": "server-peculiarity",
+		"description": "The server delivers search results from a cache which is not immediately updated when an object is changed.  Hence recent changes may not be reflected in search results",
+		"extra_keys": {
+		    "delay": "after this number of seconds, we may be reasonably sure that the search results are updated",
+		}
+  },
+  "tests_cleanup_calendar": {
+    "type": "tests-behaviour",
+	"description": "Deleting a calendar does not delete the objects, or perhaps create/delete of calendars does not work at all.  For each test run, every calendar resource object should be deleted after the test run has been performed."
+  },
+  "delete_calendar": {
+    "description": "RFC4791 says nothing about deletion of calendars, so the server implementation is free to choose weather this should be supported or not.  Section 3.2.3.2 in RFC 6638 says that if a calendar is deleted, all the calendarobjectresources on the calendar should also be deleted - but it's a bit unclear if this only applies to scheduling objects or not."
+  },
+  "expanded_search": ...
+}
+```
+
+... we would probably want to make a feature definition class/object as well.
+
