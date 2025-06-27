@@ -464,6 +464,8 @@ class ServerQuirkChecker:
         )
 
         foo = self._date_search(span, assert_found=False, event=True)
+        if self.flags_checked.get('no_search_openended'):
+            return
         if len(foo) != 0:
             raise
 
@@ -643,12 +645,15 @@ class ServerQuirkChecker:
         if self.flags_checked["no_recurring"]:
             return
 
-        events = cal.search(
-            start=datetime(2001, 4, 1),
-            end=datetime(2002, 2, 2),
-            event=True,
-            expand="server",
-        )
+        try:
+            events = cal.search(
+                start=datetime(2001, 4, 1),
+                end=datetime(2002, 2, 2),
+                event=True,
+                expand="server",
+            )
+        except:
+            self.set_flag("no_expand")
         assert len(events) == 2
         if "RRULE" in events[0].data:
             assert "RRULE" in events[1].data
@@ -693,6 +698,13 @@ class ServerQuirkChecker:
         if self.flags_checked.get("inaccurate_datesearch"):
             before = before - timedelta(days=31)
             after = after + timedelta(days=31)
+        one_event_lists = []
+        try:
+            cal.search(end=after, **kwargs)
+        except:
+            ## TODO: we should still try to rescue the rest of the run
+            self.set_flag('no_search_openended')
+            return []
         one_event_lists = [
             ## open-ended searches, should yield object
             cal.search(end=after, **kwargs),  ## 0
