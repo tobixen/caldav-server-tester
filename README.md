@@ -4,14 +4,10 @@
 
 **UPDATE 2024-11-18**: I had forgotten completely about this repository.  I'm working on a checker now in the python-caldav library - but it should probably be released as a stand-alone tool.
 
-A planned tool to check how well a caldav server adheres to the caldav standard(s)
-
-Currently there is no code here, this is just sort of a placeholder for a future project.  It is on my todo-list to create this tool, though said list is rather long.
-
 ## Existing tools
 
 * The functional test code for the Python CalDAV client library code is catching a lot of issues with the various servers - the problem is that it's not optimized for this purpose - it's just showing that tests are broken, and then it's up to whomever ran the tests to figure out if it's a server side problem or a client side problem.
-* I should do some research (or you may issue a pull request) - I believe there already exists some tools like this, but I believe none of them is as thourough as the test code mentioned above
+* I believe there already exists some tools like this, but I believe none of them is as thourough as the test code mentioned above
 
 ## Background
 
