@@ -1,0 +1,1 @@
+from .caldav_server_tester import check_server_compatibility
