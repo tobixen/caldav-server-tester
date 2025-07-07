@@ -112,8 +112,3 @@ class CheckMakeDeleteCalendar(Check):
             except Exception as e2:
                 pass
             return (calmade, None)
-        
-    
-    def run_check(self, checker):
-        raise NotImplementedError(f"A subclass {self.__class__} hasn't implemented the run_check method")
-

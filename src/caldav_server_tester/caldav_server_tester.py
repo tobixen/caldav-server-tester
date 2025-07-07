@@ -31,10 +31,10 @@ def check_server_compatibility(verbose, json, name, test_checks, **kwargs):
             conn_keys[x[7:]] = kwargs[x]
     with get_davclient(name=name, testconfig=True, **conn_keys) as conn:
         obj = ServerQuirkChecker(conn)
+        if not test_checks:
+            obj.check_all()
         for check in test_checks:
             obj.check_one(check)
-        else:
-            obj.check_all()
     obj.report(verbose=verbose, json=json)
 
 if __name__ == "__main__":
