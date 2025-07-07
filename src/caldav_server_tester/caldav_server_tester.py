@@ -1,7 +1,12 @@
 #!/usr/bin/env python
+
+"""
+This is the CLI - the "click" application
+"""
+
 import click
 from caldav.davclient import get_davclient
-from .checks import ServerQuirkChecker
+from .checks_base import ServerQuirkChecker
 
 @click.command()
 @click.option("--name", type=str, help="Choose a server by name", default=None)
@@ -15,7 +20,8 @@ from .checks import ServerQuirkChecker
 @click.option('--caldav-username', '--caldav-user', help="Full URL to the caldav server", metavar='URL')
 @click.option('--caldav-password', '--caldav-pass', help="Password for the caldav server", metavar='URL')
 #@click.option("--test-features", help="List of features to test")
-def check_server_compatibility(verbose, json, name, **kwargs):
+@click.option("--test-checks", help="List of checks to run", multiple=True)
+def check_server_compatibility(verbose, json, name, test_checks, **kwargs):
     click.echo("WARNING: this script is not production-ready")
 
     ## Remove empty keys
@@ -25,7 +31,10 @@ def check_server_compatibility(verbose, json, name, **kwargs):
             conn_keys[x[7:]] = kwargs[x]
     with get_davclient(name=name, testconfig=True, **conn_keys) as conn:
         obj = ServerQuirkChecker(conn)
-        obj.check_all()
+        for check in test_checks:
+            obj.check_one(check)
+        else:
+            obj.check_all()
     obj.report(verbose=verbose, json=json)
 
 if __name__ == "__main__":
