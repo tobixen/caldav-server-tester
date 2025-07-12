@@ -8,6 +8,10 @@ from caldav.lib.error import NotFoundError
 ## build a dependency graph and mapping from a feature to the relevant
 ## check.
 
+class PrepareCalendar(Check):
+    depends_on = { CheckMakeDeleteCalendar }
+    
+
 class CheckGetCurrentUserPrincipal(Check):
     """
     Checks support for get-current-user-principal
@@ -21,17 +25,13 @@ class CheckGetCurrentUserPrincipal(Check):
         except:
             self.checker.principal = None
             self.feature_checked('get-current-user-principal', False)
-        return self._principal
-
-class CheckRecurrences(Check):
-    def _run_check(self):
-        raise NotImplementedError("TODO ... yet something to be implemented")
+        return self.checker.principal
 
 class CheckMakeDeleteCalendar(Check):
     """
     Checks (relatively) thoroughly that it's possible to create a calendar and delete it
     """
-    features_to_be_checked = {'get-current-user-principal.has-calendar', 'create-calendar.auto', 'create-calendar', 'delete-calendar'}
+    features_to_be_checked = {'get-current-user-principal.has-calendar', 'create-calendar.auto', 'create-calendar', 'create-calendar.set-display-name', 'delete-calendar'}
     depends_on = { CheckGetCurrentUserPrincipal }
 
     def _try_make_calendar(self, cal_id, **kwargs):
@@ -39,6 +39,7 @@ class CheckMakeDeleteCalendar(Check):
         Does some attempts on creating and deleting calendars, and sets some
         flags - while others should be set by the caller.
         """
+        import pdb; pdb.set_trace()
         calmade = False
 
         ## In case calendar already exists ... wipe it first
@@ -173,3 +174,7 @@ class CheckMakeDeleteCalendar(Check):
 class CheckRecurrences(Check):
     depends_on = { CheckMakeDeleteCalendar }
     features_to_be_checked = { "recurrences.save-load.event", "recurrences.save-load.todo" }
+
+    def _run_check(self):
+        raise NotImplementedError("TODO ... yet something to be implemented")
+
