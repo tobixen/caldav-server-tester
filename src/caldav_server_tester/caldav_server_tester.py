@@ -35,7 +35,7 @@ def check_server_compatibility(verbose, json, name, test_checks, **kwargs):
             obj.check_all()
         for check in test_checks:
             obj.check_one(check)
-    obj.report(verbose=verbose, json=json)
+    click.echo(obj.report(verbose=verbose, return_what='json' if json else str))
 
 if __name__ == "__main__":
     check_server_compatibility()
