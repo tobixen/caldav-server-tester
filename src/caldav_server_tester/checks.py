@@ -1,16 +1,18 @@
+import time
+import uuid
+from datetime import datetime
+
 from caldav.compatibility_hints import FeatureSet
+from caldav.lib.error import NotFoundError, AuthorizationError
+from caldav.calendarobjectresource import Event, Todo, Journal
+
 from .checks_base import Check
-from caldav.lib.error import NotFoundError
 
 ## WORK IN PROGRESS
 
 ## TODO: We need some collector framework that can collect all checks,
 ## build a dependency graph and mapping from a feature to the relevant
 ## check.
-
-class PrepareCalendar(Check):
-    depends_on = { CheckMakeDeleteCalendar }
-    
 
 class CheckGetCurrentUserPrincipal(Check):
     """
@@ -31,7 +33,7 @@ class CheckMakeDeleteCalendar(Check):
     """
     Checks (relatively) thoroughly that it's possible to create a calendar and delete it
     """
-    features_to_be_checked = {'get-current-user-principal.has-calendar', 'create-calendar.auto', 'create-calendar', 'create-calendar.set-display-name', 'delete-calendar'}
+    features_to_be_checked = {'get-current-user-principal.has-calendar', 'create-calendar.auto', 'create-calendar', 'create-calendar.set-displayname', 'delete-calendar', 'delete-calendar.free-namespace' }
     depends_on = { CheckGetCurrentUserPrincipal }
 
     def _try_make_calendar(self, cal_id, **kwargs):
@@ -39,7 +41,6 @@ class CheckMakeDeleteCalendar(Check):
         Does some attempts on creating and deleting calendars, and sets some
         flags - while others should be set by the caller.
         """
-        import pdb; pdb.set_trace()
         calmade = False
 
         ## In case calendar already exists ... wipe it first
@@ -55,8 +56,8 @@ class CheckMakeDeleteCalendar(Check):
             cal.events()
             ## calendar creation must have gone OK.
             calmade = True
-            self.feature_checked("create-calendar")
             self.checker.principal.calendar(cal_id=cal_id).events()
+            self.feature_checked("create-calendar")
             if kwargs.get("name"):
                 try:
                     name = "A calendar with this name should not exist"
@@ -136,7 +137,7 @@ class CheckMakeDeleteCalendar(Check):
             cal = self.checker.principal.calendar(cal_id="this_should_not_exist")
             cal.events()
             self.feature_checked("create-calendar.auto")
-        except NotFoundError:
+        except (NotFoundError, AuthorizationError): ## robur throws a 403 .. and that's ok
            self.feature_checked("create-calendar.auto", False)
         except Exception as e:
             breakpoint()
@@ -153,28 +154,85 @@ class CheckMakeDeleteCalendar(Check):
         makeret = self._try_make_calendar(name="Yep", cal_id="pythoncaldav-test")
         if makeret[0]:
             ## calendar created
+            ## TODO: this is a lie - we haven't really verified this, only on second script run we will be sure
+            self.feature_checked("delete-calendar.free-namespace", True)
             return
         makeret = self._try_make_calendar(cal_id="pythoncaldav-test")
         if makeret[0]:
-            self.set_flag("no_displayname", True)
+            self.feature_checked("create-calendar.set-displayname", False)
+            self.feature_checked("delete-calendar.free-namespace")
             return
         unique_id1 = "testcalendar-" + str(uuid.uuid4())
         makeret = self._try_make_calendar(cal_id=unique_id1, name="Yep")
         if makeret[0]:
-            self.set_flag("unique_calendar_ids", True)
+            self.feature_checked("delete-calendar.free-namespace", False)
             return
         unique_id = "testcalendar-" + str(uuid.uuid4())
         makeret = self._try_make_calendar(cal_id=unique_id)
         if makeret[0]:
-            self.flags_checked["no_displayname"] = True
+            self.feature_checked("create-calendar.set-displayname", False)
+            self.feature_checked("delete-calendar.free-namespace", False)
             return
         if not "no_mkcalendar" in self.flags_checked:
             self.set_flag("no_mkcalendar", True)
 
-class CheckRecurrences(Check):
+class PrepareCalendar(Check):
+    """
+    This "check" doesn't check anything, but ensures the calendar has some known events
+    """
+    features_to_be_checked = set()
     depends_on = { CheckMakeDeleteCalendar }
     features_to_be_checked = { "recurrences.save-load.event", "recurrences.save-load.todo" }
-
+    
     def _run_check(self):
-        raise NotImplementedError("TODO ... yet something to be implemented")
+
+        ## Find or create a calendar
+        cal_id = "caldav-server-checker-calendar"
+        name = "Calendar for checking server feature support"
+        ## TODO: if create-calendar is not supported, then don't do this
+        try:
+            calendar = self.checker.principal.calendar(cal_id="caldav-server-checker-calendar")
+            calendar.events()
+        except:
+            calendar = self.checker.principal.make_calendar(cal_id=cal_id, name=name)
+        self.checker.calendar = calendar
+
+        ## TODO: replace this with one search if possible(?)
+        events_from_2000 = calendar.search(event=True, start=datetime(2000,1,1), end=datetime(2001,1,1))
+        tasks_from_2000 = calendar.search(todo=True, start=datetime(2000,1,1), end=datetime(2001,1,1))
+        ids_existing = [x.component['uid'] for x in events_from_2000 + tasks_from_2000 if datetime(2000,1,1)<x.component.get('DTSTART', datetime(1980,1,1))<datetime(2001,1,1)]
+
+        def add_if_not_existing(*largs, **kwargs):
+            if kwargs['uid'] in ids_existing:
+                ids_existing.remove(kwargs['uid'])
+                return
+            return calendar.save_object(*largs, **kwargs)
+
+        recurring_event = add_if_not_existing(
+            Event,
+            summary="monthly recurring event",
+            uid="monthly_recurring_event",
+            rrule={'FREQ': 'MONTHLY'},
+            dtstart=datetime(2000,1,12,12,0,0)
+        )
+        recurring_event.load()
+        self.feature_checked('recurrences.save-load.event')
+
+        recurring_task = add_if_not_existing(
+            Todo,
+            summary="monthly recurring task",
+            uid="monthly_recurring_event",
+            rrule={'FREQ': 'MONTHLY'},
+            dtstart=datetime(2000,1,12,12,0,0)
+        )
+        recurring_task.load()
+        self.feature_checked('recurrences.save-load.todo')
+        
+
+#class CheckRecurrences(Check):
+#    depends_on = { PrepareCalendar }
+    
+#    def _run_check(self):
+        
+        
 

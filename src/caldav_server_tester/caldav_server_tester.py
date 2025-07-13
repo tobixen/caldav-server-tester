@@ -6,7 +6,7 @@ This is the CLI - the "click" application
 
 import click
 from caldav.davclient import get_davclient
-from .checks_base import ServerQuirkChecker
+from .checker import ServerQuirkChecker
 
 @click.command()
 @click.option("--name", type=str, help="Choose a server by name", default=None)
