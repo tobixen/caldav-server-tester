@@ -25,25 +25,25 @@ Here is how configuration could look like on a server where we would like to rat
 ```python
 fancypancyserver_features = {
     "rate-limit": {
-	    "enable": True,
-		"interval": 100,
-		"count": 10,
+        "enable": True,
+        "interval": 100,
+        "count": 10,
     },
-	"search-cache": {
-	    "behaviour": "delay",
-		"delay": 10
-	},
-	"tests-cleanup-calendar": {
+    "search-cache": {
+        "behaviour": "delay",
+        "delay": 10
+    },
+    "tests-cleanup-calendar": {
        "enable": True
     },
-	"delete-calendar": {
-	    "support": "ungraceful"
-	},
-	"recurrences.expanded-search": {
-	    "support": "unsupported",
-		"links": ["https://github.com/fancy/pancyserver/issues/123"]
-	},
-	...
+    "delete-calendar": {
+        "support": "ungraceful"
+    },
+    "recurrences.expanded-search": {
+        "support": "unsupported",
+        "links": ["https://github.com/fancy/pancyserver/issues/123"]
+    },
+    ...
 }
 ```
 
@@ -109,9 +109,4 @@ rate-limit:
 
 ## Discussion points
 
-* Is this hierarchial organization of features/quirks a good idea at all?
-* Should I apply the dotted format also in the definition list?
-* Should I move the definition database out from the code and into some other file format?  yaml?  toml?  json?  yaml is relatively nice for things that are intended to be human-readable, but would require an additional dependency.  json parsing is included in the standard libraries for ages, but with the long textual descriptions, it won't look much better in yaml than in python code.  toml parsing is included in the standard libraries from 3.11, but the dotted format would clash a bit with my dotted format.  Pkl is also something that may be considered.  Rather than parsing the definitions run-time, it can be done in a build-step, to avoid extra dependencies creeping in.
-* dashes, underscores or spaces to separate words in the identifiers?  With the dotted format, spaces is at least not an option, `recurrences.expanded search.todo` is not good.  I decided to go for dashes, but maybe not a good idea, I think `recurrences.expanded_search.todo` looks a bit better than `recurrences.expanded-search.todo`
-* Organization of the hierarchy and labelling
-* Other?
+See https://github.com/tobixen/caldav-server-tester/issues/2
