@@ -210,9 +210,9 @@ class PrepareCalendar(Check):
         self.checker.cnt = 0
         
         for obj in events_from_2000 + tasks_from_2000:
-            asdate = lambda foo: foo if isinstance(foo, date) else foo.date()
+            asdate = lambda foo: foo if type(foo) == date else foo.date()
             component = obj.component
-            if date(2000,1,1) <= asdate(component.start) < date(2001,1,1):
+            if 'dtstart' in component and date(2000,1,1) <= asdate(component.start) < date(2001,1,1):
                 object_by_uid[obj.component['uid']] = obj
 
         def add_if_not_existing(*largs, **kwargs):
@@ -232,7 +232,7 @@ class PrepareCalendar(Check):
             task_with_dtstart.load()
             self.feature_checked('save-load.todo')
             self.feature_checked('save-load.todo.mixed-calendar')
-        except OSError:
+        except AuthorizationError:
             try:
                 tasklist = self.checker.principal.calendar(cal_id=f"{cal_id}_tasks")
                 tasklist.todos()
@@ -370,6 +370,8 @@ class CheckSearch(Check):
                 self.feature_checked('search.comp-type-optional', {"support": "fragile", "description": "search that does not include comptype does not yield tasks"})
             elif len(objects) == self.checker.cnt:
                 self.feature_checked('search.comp-type-optional')
+            else:
+                assert False
         except:
             raise ## TODO: temp temp, handle this better
 

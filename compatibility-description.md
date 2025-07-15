@@ -1,26 +1,27 @@
 # Improvements to the calendar server compatibility database
 
-I'm turning from negative language (`no_xxx`, `compatibility_issues`, etc) to positive language (`feature xxx`, `compatibility_hints`, etc)
+I've had a caldav server "quirk"-list in the test directory of the caldav python client library for a long time, but it has become very messy over the time, so I'm going to redo it.
+
+I'm turning from negative language (`no_xxx`, `compatibility_issues`, etc) to positive language (`feature xxx`, `compatibility_hints`, etc).  I'm also changing the design of this "database".
 
 ## Old system and experiences
 
-As of 2025-05, we had a flat list of boolean compatibility flags.  It did not work out very well:
+As of 2025-05, we had a flat list of boolean compatibility flags.  Here are some of the problem with the current list:
 
-* Sometimes we may want to have other values than only True/False attached to it.
 * Some of the flags implies other flags.  If `no_xxxfeature` is true, then it's also understood that `no_xxxfeature_on_weird_cornercase` is true.
-* Missing features should be prepended by `no_`.  But sometimes things are handled gracefully by the server, sometimes server does unexpected things, sometimes things go down in flames, maybe the level of support needs to be something more than just a boolean flag?
-* Some of the flags are indicating extra features that are not part of the RFC.
+* Missing features was frequently prepended by `no_`.  But sometimes things are handled gracefully by the server, sometimes server does unexpected things, sometimes things go down in flames.  Rather than just a list of boolean flags, it seems like we need at a minimum a key-value store that can hold some information on how well a feature is supported.
+* There are differences in the flags.  Some describes client behaviour (like rate limiting) without actually saying anything about the server.  Some describes test behaviour (like how to clean up after running tests).  Some of the flags are indicating extra features that are not part of the RFC - and most flags are indicating problems, things that aren't supported.
 * The naming of the flags are quite inconsistent - for instance, the lables sometimes have a dash, other times an underscore to separate words.
 
 ## Simple flat dict idea
 
-I did consider to just push the system a bit in the right direction by changing from a list of boolean flags to a key-value-store, thinkking that a full hiearachical database would be overkill.  However, in the end I decided that it wouldn't be future-proof and that it would be very ugly as I eventually would hack extra information into both the key and the value.  `requests=fragile:rate-limited:5/500s` may work, but it's not very nice.
+I did consider to just push the system a bit in the right direction by changing from a list of boolean flags to a key-value-store, thinkking that a full hiearachical database would be overkill.  However, in the end I decided that it wouldn't be future-proof, eventually I would probably overload both the key and the value ... things like `requests=fragile:rate-limited:5/500s` may work, but it's not very nice.
 
 ## Structured dict idea
 
 The nice thing with structured dicts is that they may easily be expanded over time, one doesn't need to think up everything from the very start.
 
-Here is how configuration could look like on a server where we would like to rate-limit requests, where it may take 10 seconds from a change is done until it's reflected in search results, where it's needed to clean up calendar after each test run, where deletion of calendars causes a 500 internal server error, and where expanded search doesn't work.  The latter has been addressed in an issue on the fancypancyserver github:
+Here is what the configuration could look like on a server where we would like to rate-limit requests, where it may take 10 seconds from a change is done until it's reflected in search results, where it's needed to clean up calendar after each test run, where deletion of calendars causes a 500 internal server error, and where expanded search doesn't work.  The latter has been addressed in an issue on the fancypancyserver github:
 
 ```python
 fancypancyserver_features = {
