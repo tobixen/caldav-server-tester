@@ -2,7 +2,7 @@
 
 I'm turning from negative language (`no_xxx`, `compatibility_issues`, etc) to positive language (`feature xxx`, `compatibility_hints`, etc)
 
-## Current status and experiences
+## Old system and experiences
 
 As of 2025-05, we had a flat list of boolean compatibility flags.  It did not work out very well:
 
