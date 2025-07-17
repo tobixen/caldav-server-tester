@@ -404,7 +404,6 @@ class CheckSearch(Check):
                 events = cal.search(category="feet,head,hands", event=True)
                 self.set_feature('search.category.fullstring.smart', len(events)==1)
         try:
-            import pdb; pdb.set_trace()
             if self.feature_checked('search.time-range.todo'):
                 objects = cal.search(start=datetime(2000,1,1, tzinfo=utc), end=datetime(2001,1,1, tzinfo=utc))
             else:
@@ -453,7 +452,6 @@ class CheckRecurrenceSearch(Check):
         self.set_feature('recurrences.search-includes-implicit-recurrences.infinite-scope', len(events)==1)
 
         ## server-side expansion
-        import pdb; pdb.set_trace()
         events = cal.search(start=datetime(2000,2,12, tzinfo=utc), end=datetime(2000,2,13, tzinfo=utc), event=True, server_expand=True)
         self.set_feature('recurrences.expanded-search.event', len(events)==1 and events[0].component['dtstart']==datetime(2000,2,12,12,0,0, tzinfo=utc))
         todos = cal.search(start=datetime(2000,2,12, tzinfo=utc), end=datetime(2000,2,13, tzinfo=utc), todo=True, server_expand=True)
