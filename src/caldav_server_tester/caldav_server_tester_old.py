@@ -464,7 +464,7 @@ class ServerQuirkChecker:
         )
 
         foo = self._date_search(span, assert_found=False, event=True)
-        if self.flags_checked.get('no_search_openended'):
+        if self.flags_checked.get("no_search_openended"):
             return
         if len(foo) != 0:
             raise
@@ -703,7 +703,7 @@ class ServerQuirkChecker:
             cal.search(end=after, **kwargs)
         except:
             ## TODO: we should still try to rescue the rest of the run
-            self.set_flag('no_search_openended')
+            self.set_flag("no_search_openended")
             return []
         one_event_lists = [
             ## open-ended searches, should yield object
@@ -1018,7 +1018,13 @@ def check_server_compatibility(verbose, json, name, **kwargs):
     for x in kwargs:
         if kwargs[x]:
             kwargs_ = kwargs[x]
-    conn = auto_conn(name=name, configfile=False, testconfig=True, environment=False, config_data=kwargs_)
+    conn = auto_conn(
+        name=name,
+        configfile=False,
+        testconfig=True,
+        environment=False,
+        config_data=kwargs_,
+    )
     obj = ServerQuirkChecker(conn)
     obj.check_all()
     obj.report(verbose=verbose, json=json)

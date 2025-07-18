@@ -13,6 +13,7 @@ from .checks_base import Check
 
 utc = timezone.utc
 
+
 def _filter_2000(objects):
     """Sometimes the only chance we have to run checks towards some cloud
     service is to run the checks towards some existing important
@@ -25,17 +26,21 @@ def _filter_2000(objects):
     than 2000?
     """
     asdate = lambda foo: foo if type(foo) == date else foo.date()
+
     def dt(obj):
         """a datetime from the object, if applicable, otherwise 1980"""
         x = obj.component
-        if 'dtstart' in x:
+        if "dtstart" in x:
             return x.start
-        if 'due' in x or 'dtend' in x:
+        if "due" in x or "dtend" in x:
             return x.end
         return date(1980)
+
     def d(obj):
         return asdate(dt(obj))
-    return (x for x in objects if date(2000,1,1) <= d(x) <= date(2001,1,1))
+
+    return (x for x in objects if date(2000, 1, 1) <= d(x) <= date(2001, 1, 1))
+
 
 ## WORK IN PROGRESS
 
@@ -43,27 +48,39 @@ def _filter_2000(objects):
 ## build a dependency graph and mapping from a feature to the relevant
 ## check.
 
+
 class CheckGetCurrentUserPrincipal(Check):
     """
     Checks support for get-current-user-principal
     """
-    features_to_be_checked = {'get-current-user-principal'}
+
+    features_to_be_checked = {"get-current-user-principal"}
     depends_on = set()
+
     def _run_check(self):
         try:
             self.checker.principal = self.client.principal()
-            self.set_feature('get-current-user-principal')
+            self.set_feature("get-current-user-principal")
         except:
             self.checker.principal = None
-            self.set_feature('get-current-user-principal', False)
+            self.set_feature("get-current-user-principal", False)
         return self.checker.principal
+
 
 class CheckMakeDeleteCalendar(Check):
     """
     Checks (relatively) thoroughly that it's possible to create a calendar and delete it
     """
-    features_to_be_checked = {'get-current-user-principal.has-calendar', 'create-calendar.auto', 'create-calendar', 'create-calendar.set-displayname', 'delete-calendar', 'delete-calendar.free-namespace' }
-    depends_on = { CheckGetCurrentUserPrincipal }
+
+    features_to_be_checked = {
+        "get-current-user-principal.has-calendar",
+        "create-calendar.auto",
+        "create-calendar",
+        "create-calendar.set-displayname",
+        "delete-calendar",
+        "delete-calendar.free-namespace",
+    }
+    depends_on = {CheckGetCurrentUserPrincipal}
 
     def _try_make_calendar(self, cal_id, **kwargs):
         """
@@ -91,7 +108,7 @@ class CheckMakeDeleteCalendar(Check):
                 try:
                     name = "A calendar with this name should not exist"
                     self.checker.principal.calendar(name=name).events()
-                    breakpoint() ## TODO - do something better here
+                    breakpoint()  ## TODO - do something better here
                 except:
                     ## This is not the exception, this is the normal
                     try:
@@ -145,10 +162,16 @@ class CheckMakeDeleteCalendar(Check):
                     cal.events()
                     ## Calendar not deleted, but no exception thrown.
                     ## Perhaps it's a "move to thrashbin"-regime on the server
-                    self.set_feature("delete-calendar", {"support": "unknown", "behaviour": "move to trashbin?"})
+                    self.set_feature(
+                        "delete-calendar",
+                        {"support": "unknown", "behaviour": "move to trashbin?"},
+                    )
                 except NotFoundError as e:
                     ## Calendar was deleted, it just took some time.
-                    self.set_feature("delete-calendar", {"support": "fragile", "behaviour": "delayed deletion"})
+                    self.set_feature(
+                        "delete-calendar",
+                        {"support": "fragile", "behaviour": "delayed deletion"},
+                    )
                     return (calmade, e)
             return (calmade, None)
         except Exception as e:
@@ -156,7 +179,13 @@ class CheckMakeDeleteCalendar(Check):
             time.sleep(10)
             try:
                 cal.delete()
-                self.set_feature("delete-calendar", {"support": "fragile", "behaviour": "deleting a recently created calendar causes exception"})
+                self.set_feature(
+                    "delete-calendar",
+                    {
+                        "support": "fragile",
+                        "behaviour": "deleting a recently created calendar causes exception",
+                    },
+                )
             except Exception as e2:
                 pass
             return (calmade, None)
@@ -166,8 +195,11 @@ class CheckMakeDeleteCalendar(Check):
             cal = self.checker.principal.calendar(cal_id="this_should_not_exist")
             cal.events()
             self.set_feature("create-calendar.auto")
-        except (NotFoundError, AuthorizationError): ## robur throws a 403 .. and that's ok
-           self.set_feature("create-calendar.auto", False)
+        except (
+            NotFoundError,
+            AuthorizationError,
+        ):  ## robur throws a 403 .. and that's ok
+            self.set_feature("create-calendar.auto", False)
         except Exception as e:
             breakpoint()
             pass
@@ -180,7 +212,9 @@ class CheckMakeDeleteCalendar(Check):
         except:
             self.set_feature("get-current-user-principal.has-calendar", False)
 
-        makeret = self._try_make_calendar(name="Yep", cal_id="caldav-server-checker-mkdel-test")
+        makeret = self._try_make_calendar(
+            name="Yep", cal_id="caldav-server-checker-mkdel-test"
+        )
         if makeret[0]:
             ## calendar created
             ## TODO: this is a lie - we haven't really verified this, only on second script run we will be sure
@@ -203,14 +237,22 @@ class CheckMakeDeleteCalendar(Check):
             self.set_feature("delete-calendar.free-namespace", False)
             return
 
+
 class PrepareCalendar(Check):
     """
     This "check" doesn't check anything, but ensures the calendar has some known events
     """
+
     features_to_be_checked = set()
-    depends_on = { CheckMakeDeleteCalendar }
-    features_to_be_checked = { "recurrences.save-load.event", "recurrences.save-load.todo", "save-load.event", "save-load.todo", "save-load.todo.mixed-calendar" }
-    
+    depends_on = {CheckMakeDeleteCalendar}
+    features_to_be_checked = {
+        "save-load.event.recurrences",
+        "save-load.todo.recurrences",
+        "save-load.event",
+        "save-load.todo",
+        "save-load.todo.mixed-calendar",
+    }
+
     def _run_check(self):
         ## Find or create a calendar
         cal_id = "caldav-server-checker-calendar"
@@ -225,23 +267,27 @@ class PrepareCalendar(Check):
         self.checker.tasklist = calendar
 
         ## TODO: replace this with one search if possible(?)
-        events_from_2000 = calendar.search(event=True, start=datetime(2000,1,1), end=datetime(2001,1,1))
-        tasks_from_2000 = calendar.search(todo=True, start=datetime(2000,1,1), end=datetime(2001,1,1))
+        events_from_2000 = calendar.search(
+            event=True, start=datetime(2000, 1, 1), end=datetime(2001, 1, 1)
+        )
+        tasks_from_2000 = calendar.search(
+            todo=True, start=datetime(2000, 1, 1), end=datetime(2001, 1, 1)
+        )
 
         object_by_uid = {}
 
         self.checker.cnt = 0
-        
+
         for obj in _filter_2000(events_from_2000 + tasks_from_2000):
-            object_by_uid[obj.component['uid']] = obj
+            object_by_uid[obj.component["uid"]] = obj
 
         def add_if_not_existing(*largs, **kwargs):
             self.checker.cnt += 1
             cal = self.checker.tasklist if largs[0] == Todo else self.checker.calendar
-            if 'uid' in kwargs:
-                uid = kwargs['uid']
+            if "uid" in kwargs:
+                uid = kwargs["uid"]
             elif not kwargs:
-                uid = re.search('UID:(.*)\n', largs[1]).group(1)
+                uid = re.search("UID:(.*)\n", largs[1]).group(1)
             if uid in object_by_uid:
                 return object_by_uid.pop(uid)
             return cal.save_object(*largs, **kwargs)
@@ -251,58 +297,62 @@ class PrepareCalendar(Check):
                 Todo,
                 summary="task with a dtstart",
                 uid="csc_simple_task1",
-                dtstart=date(2000,1,7),
+                dtstart=date(2000, 1, 7),
             )
             task_with_dtstart.load()
-            self.set_feature('save-load.todo')
-            self.set_feature('save-load.todo.mixed-calendar')
+            self.set_feature("save-load.todo")
+            self.set_feature("save-load.todo.mixed-calendar")
         except AuthorizationError:
             try:
                 tasklist = self.checker.principal.calendar(cal_id=f"{cal_id}_tasks")
                 tasklist.todos()
             except:
-                tasklist = self.checker.principal.make_calendar(cal_id=f"{cal_id}_tasks", name=f"{name} - tasks", supported_calendar_component_set=['VTODO'])
+                tasklist = self.checker.principal.make_calendar(
+                    cal_id=f"{cal_id}_tasks",
+                    name=f"{name} - tasks",
+                    supported_calendar_component_set=["VTODO"],
+                )
             self.checker.tasklist = tasklist
             task_with_dtstart = add_if_not_existing(
                 Todo,
                 summary="task with a dtstart",
                 uid="csc_simple_task1",
-                dtstart=date(2000,1,7),
+                dtstart=date(2000, 1, 7),
             )
             task_with_dtstart.load()
-            self.set_feature('save-load.todo')
-            self.set_feature('save-load.todo.mixed-calendar', False)
+            self.set_feature("save-load.todo")
+            self.set_feature("save-load.todo.mixed-calendar", False)
 
         simple_event = add_if_not_existing(
             Event,
             summary="simple event with a start time and an end time",
             uid="csc_simple_event1",
-            dtstart=datetime(2000,1,1,12,0,0, tzinfo=utc),
-            dtend=datetime(2000,1,1,13,0,0, tzinfo=utc),
+            dtstart=datetime(2000, 1, 1, 12, 0, 0, tzinfo=utc),
+            dtend=datetime(2000, 1, 1, 13, 0, 0, tzinfo=utc),
         )
         simple_event.load()
-        self.set_feature('save-load.event')
+        self.set_feature("save-load.event")
 
         non_duration_event = add_if_not_existing(
             Event,
             summary="event with a start time but no end time",
             uid="csc_simple_event2",
-            dtstart=datetime(2000,1,2,12,0,0, tzinfo=utc),
+            dtstart=datetime(2000, 1, 2, 12, 0, 0, tzinfo=utc),
         )
-        
+
         one_day_event = add_if_not_existing(
             Event,
             summary="event with a start date but no end date",
             uid="csc_simple_event3",
-            dtstart=date(2000,1,3),
+            dtstart=date(2000, 1, 3),
         )
 
         two_days_event = add_if_not_existing(
             Event,
             summary="event with a start date and end date",
             uid="csc_simple_event4",
-            dtstart=date(2000,1,4),
-            dtend=date(2000,1,6),
+            dtstart=date(2000, 1, 4),
+            dtend=date(2000, 1, 6),
         )
 
         event_with_categories = add_if_not_existing(
@@ -310,48 +360,49 @@ class PrepareCalendar(Check):
             summary="event with categories",
             uid="csc_event_with_categories",
             categories="hands,feet,head",
-            dtstart=datetime(2000,1,7,12,0,0),
-            dtend=datetime(2000,1,7,13,0,0))
+            dtstart=datetime(2000, 1, 7, 12, 0, 0),
+            dtend=datetime(2000, 1, 7, 13, 0, 0),
+        )
 
         task_with_due = add_if_not_existing(
             Todo,
             summary="task with a due date",
             uid="csc_simple_task2",
-            due=date(2000,1,8),
+            due=date(2000, 1, 8),
         )
 
         task_with_dtstart_and_due = add_if_not_existing(
             Todo,
             summary="task with a dtstart time and due time",
             uid="csc_simple_task3",
-            dtstart=datetime(2000,1,9,12,0,0, tzinfo=utc),
-            due=datetime(2000,1,9,13,0,0, tzinfo=utc),
+            dtstart=datetime(2000, 1, 9, 12, 0, 0, tzinfo=utc),
+            due=datetime(2000, 1, 9, 13, 0, 0, tzinfo=utc),
         )
 
         ## TODO: there are more variants to be tested - dtstart date and due date,
         ## dtstart and duration, only duration, no time spec at all, ...
-        
+
         recurring_event = add_if_not_existing(
             Event,
             summary="monthly recurring event",
             uid="csc_monthly_recurring_event",
-            rrule={'FREQ': 'MONTHLY'},
-            dtstart=datetime(2000,1,12,12,0,0, tzinfo=utc),
-            dtend=datetime(2000,1,12,13,0,0, tzinfo=utc),
+            rrule={"FREQ": "MONTHLY"},
+            dtstart=datetime(2000, 1, 12, 12, 0, 0, tzinfo=utc),
+            dtend=datetime(2000, 1, 12, 13, 0, 0, tzinfo=utc),
         )
         recurring_event.load()
-        self.set_feature('recurrences.save-load.event')
+        self.set_feature("save-load.event.recurrences")
 
         recurring_task = add_if_not_existing(
             Todo,
             summary="monthly recurring task",
             uid="csc_monthly_recurring_task",
-            rrule={'FREQ': 'MONTHLY'},
-            dtstart=datetime(2000,1,12,12,0,0, tzinfo=utc),
-            due=datetime(2000,1,12,13,0,0, tzinfo=utc),
+            rrule={"FREQ": "MONTHLY"},
+            dtstart=datetime(2000, 1, 12, 12, 0, 0, tzinfo=utc),
+            due=datetime(2000, 1, 12, 13, 0, 0, tzinfo=utc),
         )
         recurring_task.load()
-        self.set_feature('recurrences.save-load.todo')
+        self.set_feature("save-load.todo.recurrences")
 
         recurring_event_with_exception = add_if_not_existing(
             Event,
@@ -374,87 +425,201 @@ DTEND:20000213T130000Z
 DTSTAMP:20240429T181103Z
 SUMMARY:February recurrence with different summary
 END:VEVENT
-END:VCALENDAR""")
-
+END:VCALENDAR""",
+        )
 
         ## No more existing IDs in the calendar from 2000 ... otherwise,
         ## more work is needed to ensure those won't pollute the tests nor be
         ## deleted by accident
         assert not object_by_uid
-        assert(self.checker.calendar.events())
-        assert(self.checker.tasklist.todos())
+        assert self.checker.calendar.events()
+        assert self.checker.tasklist.todos()
+
 
 class CheckSearch(Check):
-    depends_on = { PrepareCalendar }
-    features_to_be_checked = { "search.time-range.event", "search.category", "search.category.fullstring","search.category.fullstring.smart", "search.time-range.todo", "search.comp-type-optional" } ## TODO: we can do so much better than this
+    depends_on = {PrepareCalendar}
+    features_to_be_checked = {
+        "search.time-range.event",
+        "search.category",
+        "search.category.fullstring",
+        "search.category.fullstring.smart",
+        "search.time-range.todo",
+        "search.comp-type-optional",
+    }  ## TODO: we can do so much better than this
 
     def _run_check(self):
         cal = self.checker.calendar
         tasklist = self.checker.tasklist
-        events = cal.search(start=datetime(2000,1,1, tzinfo=utc), end=datetime(2000,1,2, tzinfo=utc), event=True)
-        self.set_feature('search.time-range.event', len(events)==1)
-        tasks = tasklist.search(start=datetime(2000,1,9, tzinfo=utc), end=datetime(2000,1,10, tzinfo=utc), todo=True, include_completed=True)
-        self.set_feature('search.time-range.todo', len(tasks)==1)
+        events = cal.search(
+            start=datetime(2000, 1, 1, tzinfo=utc),
+            end=datetime(2000, 1, 2, tzinfo=utc),
+            event=True,
+        )
+        self.set_feature("search.time-range.event", len(events) == 1)
+        tasks = tasklist.search(
+            start=datetime(2000, 1, 9, tzinfo=utc),
+            end=datetime(2000, 1, 10, tzinfo=utc),
+            todo=True,
+            include_completed=True,
+        )
+        self.set_feature("search.time-range.todo", len(tasks) == 1)
         events = cal.search(category="hands", event=True)
-        self.set_feature('search.category', len(events)==1)
-        if len(events)==1:
+        self.set_feature("search.category", len(events) == 1)
+        if len(events) == 1:
             events = cal.search(category="hands,feet,head", event=True)
-            self.set_feature('search.category.fullstring', len(events)==1)
-            if len(events)==1:
+            self.set_feature("search.category.fullstring", len(events) == 1)
+            if len(events) == 1:
                 events = cal.search(category="feet,head,hands", event=True)
-                self.set_feature('search.category.fullstring.smart', len(events)==1)
+                self.set_feature("search.category.fullstring.smart", len(events) == 1)
         try:
-            if self.feature_checked('search.time-range.todo'):
-                objects = cal.search(start=datetime(2000,1,1, tzinfo=utc), end=datetime(2001,1,1, tzinfo=utc))
+            if self.feature_checked("search.time-range.todo"):
+                objects = cal.search(
+                    start=datetime(2000, 1, 1, tzinfo=utc),
+                    end=datetime(2001, 1, 1, tzinfo=utc),
+                )
             else:
                 objects = _filter_2000(cal.search())
             if len(objects) == 0:
-                self.set_feature('search.comp-type-optional', {"support": "unsupported", "description": "search that does not include comptype yields nothing"})
+                self.set_feature(
+                    "search.comp-type-optional",
+                    {
+                        "support": "unsupported",
+                        "description": "search that does not include comptype yields nothing",
+                    },
+                )
             elif cal == tasklist and not any(x for x in objects if isinstance(x, Todo)):
-                self.set_feature('search.comp-type-optional', {"support": "fragile", "description": "search that does not include comptype does not yield tasks"})
-            elif cal != tasklist and len(objects) + len(tasklist.search(start=datetime(2000,1,1, tzinfo=utc), end=datetime(2001,1,1, tzinfo=utc))) == self.checker.cnt:
-                self.set_feature('search.comp-type-optional', {"support": "full", "description": "comp-filter is redundant in search as a calendar can only hold one kind of components"})
+                self.set_feature(
+                    "search.comp-type-optional",
+                    {
+                        "support": "fragile",
+                        "description": "search that does not include comptype does not yield tasks",
+                    },
+                )
+            elif (
+                cal != tasklist
+                and len(objects)
+                + len(
+                    tasklist.search(
+                        start=datetime(2000, 1, 1, tzinfo=utc),
+                        end=datetime(2001, 1, 1, tzinfo=utc),
+                    )
+                )
+                == self.checker.cnt
+            ):
+                self.set_feature(
+                    "search.comp-type-optional",
+                    {
+                        "support": "full",
+                        "description": "comp-filter is redundant in search as a calendar can only hold one kind of components",
+                    },
+                )
             elif len(objects) == self.checker.cnt:
-                self.set_feature('search.comp-type-optional')
+                self.set_feature("search.comp-type-optional")
             else:
                 ## TODO ... we need to do more testing on search to conclude certainly on this one.  But at least we get something out.
-                self.set_feature('search.comp-type-optional', {"support": "fragile", "description": "unexpected results from date-search without comp-type"})
+                self.set_feature(
+                    "search.comp-type-optional",
+                    {
+                        "support": "fragile",
+                        "description": "unexpected results from date-search without comp-type",
+                    },
+                )
         except:
-            self.set_feature('search.comp-type-optional', {"support": "ungraceful"})
+            self.set_feature("search.comp-type-optional", {"support": "ungraceful"})
+
 
 class CheckRecurrenceSearch(Check):
-    depends_on = { CheckSearch }
+    depends_on = {CheckSearch}
     features_to_be_checked = {
-        "recurrences.search-includes-implicit-recurrences.todo",
-        "recurrences.search-includes-implicit-recurrences.event",
-        "recurrences.search-includes-implicit-recurrences.infinite-scope",
-        "recurrences.expanded-search.todo",
-        "recurrences.expanded-search.event",
-        "recurrences.expanded-search.exception"
+        "search.recurrences.includes-implicit.todo",
+        "search.recurrences.includes-implicit.event",
+        "search.recurrences.includes-implicit.infinite-scope",
+        "search.recurrences.expanded.todo",
+        "search.recurrences.expanded.event",
+        "search.recurrences.expanded.exception",
     }
-    
+
     def _run_check(self):
         cal = self.checker.calendar
         tl = self.checker.tasklist
-        events = cal.search(start=datetime(2000,1,12, tzinfo=utc), end=datetime(2000,1,13, tzinfo=utc), event=True)
+        events = cal.search(
+            start=datetime(2000, 1, 12, tzinfo=utc),
+            end=datetime(2000, 1, 13, tzinfo=utc),
+            event=True,
+        )
         assert len(events) == 1
         if self.checker.features_checked.check_support("search.time-range.todo"):
-            todos = tl.search(start=datetime(2000,1,12, tzinfo=utc), end=datetime(2000,1,13, tzinfo=utc), todo=True, include_completed=True)
+            todos = tl.search(
+                start=datetime(2000, 1, 12, tzinfo=utc),
+                end=datetime(2000, 1, 13, tzinfo=utc),
+                todo=True,
+                include_completed=True,
+            )
             assert len(todos) == 1
-        events = cal.search(start=datetime(2000,2,12, tzinfo=utc), end=datetime(2000,2,13, tzinfo=utc), event=True)
-        self.set_feature('recurrences.search-includes-implicit-recurrences.event', len(events)==1)
-        todos = tl.search(start=datetime(2000,2,12, tzinfo=utc), end=datetime(2000,2,13, tzinfo=utc), todo=True)
-        self.set_feature('recurrences.search-includes-implicit-recurrences.todo', len(events)==1)
-        
-        exception = cal.search(start=datetime(2000,2,13,11, tzinfo=utc), end=datetime(2000,2,13,13, tzinfo=utc), event=True)
-        assert len(exception)==1
-        far_future_recurrence = cal.search(start=datetime(2045,3,12, tzinfo=utc), end=datetime(2045,3,13, tzinfo=utc), event=True)
-        self.set_feature('recurrences.search-includes-implicit-recurrences.infinite-scope', len(events)==1)
+        events = cal.search(
+            start=datetime(2000, 2, 12, tzinfo=utc),
+            end=datetime(2000, 2, 13, tzinfo=utc),
+            event=True,
+        )
+        self.set_feature("search.recurrences.includes-implicit.event", len(events) == 1)
+        todos = tl.search(
+            start=datetime(2000, 2, 12, tzinfo=utc),
+            end=datetime(2000, 2, 13, tzinfo=utc),
+            todo=True,
+        )
+        self.set_feature("search.recurrences.includes-implicit.todo", len(events) == 1)
+
+        exception = cal.search(
+            start=datetime(2000, 2, 13, 11, tzinfo=utc),
+            end=datetime(2000, 2, 13, 13, tzinfo=utc),
+            event=True,
+        )
+        assert len(exception) == 1
+        far_future_recurrence = cal.search(
+            start=datetime(2045, 3, 12, tzinfo=utc),
+            end=datetime(2045, 3, 13, tzinfo=utc),
+            event=True,
+        )
+        self.set_feature(
+            "search.recurrences.includes-implicit.infinite-scope", len(events) == 1
+        )
 
         ## server-side expansion
-        events = cal.search(start=datetime(2000,2,12, tzinfo=utc), end=datetime(2000,2,13, tzinfo=utc), event=True, server_expand=True)
-        self.set_feature('recurrences.expanded-search.event', len(events)==1 and events[0].component['dtstart']==datetime(2000,2,12,12,0,0, tzinfo=utc))
-        todos = cal.search(start=datetime(2000,2,12, tzinfo=utc), end=datetime(2000,2,13, tzinfo=utc), todo=True, server_expand=True)
-        self.set_feature('recurrences.expanded-search.todo', len(events)==1 and events[0].component['dtstart']==datetime(2000,2,12,12,0,0, tzinfo=utc))
-        exception = cal.search(start=datetime(2000,2,13,11, tzinfo=utc), end=datetime(2000,2,13,13, tzinfo=utc), event=True, server_expand=True)
-        self.set_feature('recurrences.expanded-search.exception', len(exception)==1 and exception[0].component['dtstart']==datetime(2000,2,13,12,0,0, tzinfo=utc) and exception[0].component['summary'] == 'February recurrence with different summary')
+        events = cal.search(
+            start=datetime(2000, 2, 12, tzinfo=utc),
+            end=datetime(2000, 2, 13, tzinfo=utc),
+            event=True,
+            server_expand=True,
+        )
+        self.set_feature(
+            "search.recurrences.expanded.event",
+            len(events) == 1
+            and events[0].component["dtstart"]
+            == datetime(2000, 2, 12, 12, 0, 0, tzinfo=utc),
+        )
+        todos = cal.search(
+            start=datetime(2000, 2, 12, tzinfo=utc),
+            end=datetime(2000, 2, 13, tzinfo=utc),
+            todo=True,
+            server_expand=True,
+        )
+        self.set_feature(
+            "search.recurrences.expanded.todo",
+            len(events) == 1
+            and events[0].component["dtstart"]
+            == datetime(2000, 2, 12, 12, 0, 0, tzinfo=utc),
+        )
+        exception = cal.search(
+            start=datetime(2000, 2, 13, 11, tzinfo=utc),
+            end=datetime(2000, 2, 13, 13, tzinfo=utc),
+            event=True,
+            server_expand=True,
+        )
+        self.set_feature(
+            "search.recurrences.expanded.exception",
+            len(exception) == 1
+            and exception[0].component["dtstart"]
+            == datetime(2000, 2, 13, 12, 0, 0, tzinfo=utc)
+            and exception[0].component["summary"]
+            == "February recurrence with different summary",
+        )
