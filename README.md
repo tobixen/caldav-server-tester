@@ -1,6 +1,6 @@
 # caldav-server-tester
 
-**TODO**: This readme should be rewritten completely.  Usage documentation needs to be written.
+**TODO**: This readme should be rewritten completely.  Installation and usage documentation needs to be written.
 
 **UPDATE 2025-11-08**: My idea was to release this together with caldav 2.1 before the summer vacation ... but then it was suddenly there, and for the last six months things have constantly been happening in my life preventing me to focus, but now I'm releasing 0.1.  Hurray!  It's far from complete, though, much more work is needed before we can go 1.0.
 
