@@ -1,8 +1,16 @@
 # caldav-server-tester
 
+**TODO**: This readme should be rewritten completely.  Usage documentation needs to be written.
+
+**UPDATE 2025-11-08**: My idea was to release this together with caldav 2.1 before the summer vacation ... but then it was suddenly there, and for the last six months things have constantly been happening in my life preventing me to focus, but now I'm releasing 0.1.  Hurray!  It's far from complete, though, much more work is needed before we can go 1.0.
+
 **UPDATE 2025-05-15**: Server checker script has been moved from the caldav library and here.  I got it to work, but it requires the python caldav library version 1.5 or higher - and as of today, it's not released yet.
 
 **UPDATE 2024-11-18**: I had forgotten completely about this repository.  I'm working on a checker now in the python-caldav library - but it should probably be released as a stand-alone tool.
+
+## Testing
+
+No test code exists so far.  The code is exercised regularly through the test suite in the caldav project.
 
 ## Existing tools
 
@@ -28,3 +36,7 @@ As time grew and the test code for the caldav library got more and more bloated,
 * It should be possible to get the output in json-format
 * Output should be compatible with the list in caldav/tests/compatibility_issues.py (but said file may need some editing - and eventually I'd like to move it out of the test directory and make it part of the libary).
 * Some of the items in compatibility_issues.py affects the possibility to run tests at all.  In the typical test in the python caldav library I'm creating a calendar, populating it with some known input and then doing queries.  It's needed to be relatively clever so that we can test whatever search queries that can be tested even towards a read-only calendar with arbitrary contents.
+
+## Vocabulary
+
+The name of the project is the **caldav-server-tester**, but internally the word **test** is reserved for code tests under the test directory, code that actually probes server capability is a **check**.

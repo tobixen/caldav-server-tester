@@ -335,7 +335,7 @@ class ServerQuirkChecker:
         self._default_calendar = cal
         return cal
 
-    def check_support(self):
+    def is_supported(self):
         self.set_flag("dav_not_supported", True)
         self.set_flag("no_scheduling", True)
         try:
@@ -914,7 +914,7 @@ class ServerQuirkChecker:
     def check_all(self):
         try:
             self.check_principal()
-            self.check_support()
+            self.is_supported()
             self.check_propfind()
             self.check_mkcalendar()
             self._fix_cal()

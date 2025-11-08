@@ -30,9 +30,9 @@ from .checker import ServerQuirkChecker
     help="Password for the caldav server",
     metavar="URL",
 )
-# @click.option("--test-features", help="List of features to test")
-@click.option("--test-checks", help="List of checks to run", multiple=True)
-def check_server_compatibility(verbose, json, name, test_checks, **kwargs):
+# @click.option("--check-features", help="List of features to test")
+@click.option("--run-checks", help="List of checks to run", multiple=True)
+def check_server_compatibility(verbose, json, name, run_checks, **kwargs):
     click.echo("WARNING: this script is not production-ready")
 
     ## Remove empty keys
@@ -42,12 +42,13 @@ def check_server_compatibility(verbose, json, name, test_checks, **kwargs):
             conn_keys[x[7:]] = kwargs[x]
     with get_davclient(name=name, testconfig=True, **conn_keys) as conn:
         obj = ServerQuirkChecker(conn)
-        if not test_checks:
+        if not run_checks:
             obj.check_all()
-        for check in test_checks:
+        for check in run_checks:
             obj.check_one(check)
+    test_cal_info = obj.expected_features.is_supported('test-calendar.compatibility-tests', return_type=dict)
+    obj.cleanup(force=False)
     click.echo(obj.report(verbose=verbose, return_what="json" if json else str))
-
 
 if __name__ == "__main__":
     check_server_compatibility()
