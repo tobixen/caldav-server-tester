@@ -581,6 +581,7 @@ class CheckRecurrenceSearch(Check):
             start=datetime(2000, 1, 12, tzinfo=utc),
             end=datetime(2000, 1, 13, tzinfo=utc),
             event=True,
+            post_filter=False,
         )
         assert len(events) == 1
         if self.checker.features_checked.is_supported("search.time-range.todo"):
@@ -589,12 +590,14 @@ class CheckRecurrenceSearch(Check):
                 end=datetime(2000, 1, 13, tzinfo=utc),
                 todo=True,
                 include_completed=True,
+                post_filter=False,
             )
             assert len(todos) == 1
         events = cal.search(
             start=datetime(2000, 2, 12, tzinfo=utc),
             end=datetime(2000, 2, 13, tzinfo=utc),
             event=True,
+            post_filter=False,
         )
         self.set_feature("search.recurrences.includes-implicit.event", len(events) == 1)
         todos1 = tl.search(
@@ -602,6 +605,7 @@ class CheckRecurrenceSearch(Check):
             end=datetime(2000, 2, 13, tzinfo=utc),
             todo=True,
             include_completed=True
+            post_filter=False,
         )
         self.set_feature("search.recurrences.includes-implicit.todo", len(todos1) == 1)
 
@@ -610,6 +614,7 @@ class CheckRecurrenceSearch(Check):
                 start=datetime(2000, 2, 12, tzinfo=utc),
                 end=datetime(2000, 2, 13, tzinfo=utc),
                 todo=True,
+                post_filter=False,
             )
             self.set_feature("search.recurrences.includes-implicit.todo.pending", len(todos2) == 1)
 
@@ -617,12 +622,14 @@ class CheckRecurrenceSearch(Check):
             start=datetime(2000, 2, 13, 11, tzinfo=utc),
             end=datetime(2000, 2, 13, 13, tzinfo=utc),
             event=True,
+            post_filter=False,
         )
         assert len(exception) == 1
         far_future_recurrence = cal.search(
             start=datetime(2045, 3, 12, tzinfo=utc),
             end=datetime(2045, 3, 13, tzinfo=utc),
             event=True,
+            post_filter=False,
         )
         self.set_feature(
             "search.recurrences.includes-implicit.infinite-scope", len(events) == 1
@@ -634,6 +641,7 @@ class CheckRecurrenceSearch(Check):
             end=datetime(2000, 2, 13, tzinfo=utc),
             event=True,
             server_expand=True,
+            post_filter=False,
         )
         self.set_feature(
             "search.recurrences.expanded.event",
@@ -646,6 +654,7 @@ class CheckRecurrenceSearch(Check):
             end=datetime(2000, 2, 13, tzinfo=utc),
             todo=True,
             server_expand=True,
+            post_filter=False,
         )
         self.set_feature(
             "search.recurrences.expanded.todo",
@@ -658,6 +667,7 @@ class CheckRecurrenceSearch(Check):
             end=datetime(2000, 2, 13, 13, tzinfo=utc),
             event=True,
             server_expand=True,
+            post_filter=False,
         )
         self.set_feature(
             "search.recurrences.expanded.exception",
