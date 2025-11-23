@@ -6,7 +6,7 @@ from datetime import datetime
 from datetime import date
 
 from caldav.compatibility_hints import FeatureSet
-from caldav.lib.error import NotFoundError, AuthorizationError, ReportError
+from caldav.lib.error import NotFoundError, AuthorizationError, ReportError, DAVError
 from caldav.calendarobjectresource import Event, Todo, Journal
 
 from .checks_base import Check
@@ -121,7 +121,7 @@ class CheckMakeDeleteCalendar(Check):
                     except:
                         self.set_feature("create-calendar.set-displayname", False)
 
-        except Exception as e:
+        except DAVError as e:
             ## calendar creation created an exception.  Maybe the calendar exists?
             ## in any case, return exception
             cal = self.checker.principal.calendar(cal_id=cal_id)
@@ -144,11 +144,7 @@ class CheckMakeDeleteCalendar(Check):
             except NotFoundError:
                 cal = None
             ## Delete throw no exceptions, but was the calendar deleted?
-            if not cal or (
-                self.flags_checked.get(
-                    "non_existing_calendar_found" and len(events) == 0
-                )
-            ):
+            if not cal or self.checker.features_checked.is_supported('create-calendar.auto'):
                 self.set_feature("delete-calendar")
                 ## Calendar probably deleted OK.
                 ## (in the case of non_existing_calendar_found, we should add
@@ -176,7 +172,7 @@ class CheckMakeDeleteCalendar(Check):
                     )
                     return (calmade, e)
             return (calmade, None)
-        except Exception as e:
+        except DAVError as e:
             time.sleep(10)
             try:
                 cal.delete()
@@ -187,7 +183,7 @@ class CheckMakeDeleteCalendar(Check):
                         "behaviour": "deleting a recently created calendar causes exception",
                     },
                 )
-            except Exception as e2:
+            except DAVError as e2:
                 self.set_feature("delete-calendar", False)
             return (calmade, None)
 
@@ -336,7 +332,7 @@ class PrepareCalendar(Check):
                     uid="csc_simple_task1",
                     dtstart=date(2000, 1, 7),
                 )
-            except Exception as e: ## exception e for debugging purposes
+            except DAVError as e: ## exception e for debugging purposes
                 self.set_feature("save-load.todo", 'ungraceful')
                 return
 

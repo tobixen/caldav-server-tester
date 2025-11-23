@@ -3,8 +3,16 @@
 These tests demonstrate how to mock CalDAV server responses for testing.
 They execute the actual check logic but with mocked server responses.
 
-NOTE: These tests can be slow (60+ seconds) because they run complex
+NOTE: These tests can be slow because they run complex
 check logic. Use pytest -m "not slow" to skip them in normal development.
+
+DISCLAIMER: those tests are AI-generated, and haven't been reviewed
+
+Tests based on mocked up server-client-communication is notoriously
+fragile, the only reason why this is added at all is that it's a
+relatively cheap thing to do with AI - but the value is questionable.
+If those tests will break in the future, then consider just deleting
+this file.
 """
 
 from datetime import date, datetime, timezone
@@ -99,13 +107,74 @@ class TestCheckMakeDeleteCalendar:
         """When accessing non-existent calendar creates it, auto feature is set"""
         checker, client, principal = self.create_checker_with_principal()
 
-        # Mock auto-creation: calendar doesn't exist but returns something
-        mock_calendar = Mock()
-        mock_calendar.events.return_value = []
-        principal.calendar.return_value = mock_calendar
+        # Mock auto-creation: accessing a non-existent calendar auto-creates it
+        mock_auto_calendar = Mock()
+        mock_auto_calendar.events.return_value = []
 
-        # Mock that make_calendar fails (since auto-creation worked)
-        principal.make_calendar.side_effect = Exception("Already exists")
+        # Mock successful calendar creation when trying to make test calendars
+        mock_test_calendar = Mock()
+        mock_test_calendar.id = "caldav-server-checker-mkdel-test"
+
+        # Track state: calendar is created (by make_calendar) then deleted
+        created = [False]
+        deleted = [False]
+
+        def delete_cal():
+            # Only mark as deleted if it was actually created
+            if created[0]:
+                deleted[0] = True
+        mock_test_calendar.delete = delete_cal
+
+        # events() should raise NotFoundError after deletion
+        def events_side_effect():
+            if deleted[0]:
+                raise NotFoundError("Calendar was deleted")
+            return []
+        mock_test_calendar.events.side_effect = events_side_effect
+
+        # Track all calls for debugging
+        calls = []
+        def calendar_side_effect(cal_id=None, name=None):
+            calls.append((cal_id, name))
+
+            # First call: checking if "this_should_not_exist" auto-creates
+            if cal_id == "this_should_not_exist":
+                # Auto-creation: returns a calendar even though it "shouldn't exist"
+                return mock_auto_calendar
+
+            # Calls during _try_make_calendar for "caldav-server-checker-mkdel-test":
+            # 1. Line 96: Try to delete if exists (before creation)
+            # 2. Line 107: Verify after make_calendar()
+            # 3. Line 117: Look up by name for displayname check
+            # 4. Line 142: Check if deleted
+            # 5. Line 158: Recheck after sleep if not deleted
+
+            # If calendar was deleted, it's not found
+            if deleted[0] and cal_id == "caldav-server-checker-mkdel-test":
+                raise NotFoundError("Calendar was deleted")
+
+            # Looking up by name (for displayname check)
+            if name == "Yep":
+                cal = Mock()
+                cal.id = mock_test_calendar.id
+                cal.events.return_value = []
+                return cal
+
+            # Normal lookup by cal_id (before deletion)
+            if cal_id == "caldav-server-checker-mkdel-test":
+                return mock_test_calendar
+
+            # Everything else not found
+            raise NotFoundError("Calendar not found")
+
+        principal.calendar.side_effect = calendar_side_effect
+        principal.calendars.return_value = []
+
+        # Track when calendar is created
+        def make_calendar_side_effect(cal_id=None, **kwargs):
+            created[0] = True
+            return mock_test_calendar
+        principal.make_calendar.side_effect = make_calendar_side_effect
 
         check = CheckMakeDeleteCalendar(checker)
         check.run_check()
