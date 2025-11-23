@@ -50,7 +50,7 @@ class ServerQuirkChecker:
             test_cal_info = self.expected_features.is_supported('test-calendar.compatibility-tests', return_type=dict)
             if not test_cal_info.get("cleanup", False):
                 return
-        if self.features_checked.is_supported("create-calendar") and self.features_checked.check_support("delete-calendar"):
+        if self.features_checked.is_supported("create-calendar") and self.features_checked.is_supported("delete-calendar"):
             self.calendar.delete()
             if self.tasklist != self.calendar:
                 self.tasklist.delete()

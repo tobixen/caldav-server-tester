@@ -604,7 +604,7 @@ class CheckRecurrenceSearch(Check):
             start=datetime(2000, 2, 12, tzinfo=utc),
             end=datetime(2000, 2, 13, tzinfo=utc),
             todo=True,
-            include_completed=True
+            include_completed=True,
             post_filter=False,
         )
         self.set_feature("search.recurrences.includes-implicit.todo", len(todos1) == 1)
