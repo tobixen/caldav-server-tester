@@ -254,7 +254,9 @@ class PrepareCalendar(Check):
     depends_on = {CheckMakeDeleteCalendar}
     features_to_be_checked = {
         "save-load.event.recurrences",
+        "save-load.event.recurrences.count",
         "save-load.todo.recurrences",
+        "save-load.todo.recurrences.count",
         "save-load.event",
         "save-load.todo",
         "save-load.todo.mixed-calendar",
@@ -410,6 +412,24 @@ class PrepareCalendar(Check):
         recurring_event.load()
         self.set_feature("save-load.event.recurrences")
 
+        event_with_rrule_and_count = add_if_not_existing(Event, """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example Corp.//CalDAV Client//EN
+BEGIN:VEVENT
+UID:weeklymeeting
+DTSTAMP:20001013T151313Z
+DTSTART:20001018T140000Z
+DTEND:20001018T150000Z
+SUMMARY:Weekly meeting for three weeks
+RRULE:FREQ=WEEKLY;COUNT=3
+END:VEVENT
+END:VCALENDAR""")
+        event_with_rrule_and_count.load()
+        component = event_with_rrule_and_count.component
+        rrule = component.get('RRULE', None)
+        count = rrule and rrule.get('COUNT')
+        self.set_feature("save-load.event.recurrences.count", count==[3])
+
         recurring_task = add_if_not_existing(
             Todo,
             summary="monthly recurring task",
@@ -420,6 +440,27 @@ class PrepareCalendar(Check):
         )
         recurring_task.load()
         self.set_feature("save-load.todo.recurrences")
+
+        task_with_rrule_and_count = add_if_not_existing(Todo, """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example Corp.//CalDAV Client//EN
+BEGIN:VTODO
+UID:takeoutthethrash
+DTSTAMP:20001013T151313Z
+DTSTART:20001016T065500Z
+STATUS:NEEDS-ACTION
+DURATION:PT10M
+SUMMARY:Weekly task to be done three times
+RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=3
+CATEGORIES:CHORE
+PRIORITY:3
+END:VTODO
+END:VCALENDAR""")
+        task_with_rrule_and_count.load()
+        component = task_with_rrule_and_count.component
+        rrule = component.get('RRULE', None)
+        count = rrule and rrule.get('COUNT')
+        self.set_feature("save-load.todo.recurrences.count", count==[3])
 
         recurring_event_with_exception = add_if_not_existing(
             Event,
