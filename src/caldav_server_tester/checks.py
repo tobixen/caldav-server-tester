@@ -6,8 +6,9 @@ from datetime import datetime
 from datetime import date
 
 from caldav.compatibility_hints import FeatureSet
-from caldav.lib.error import NotFoundError, AuthorizationError, ReportError
+from caldav.lib.error import NotFoundError, AuthorizationError, ReportError, DAVError
 from caldav.calendarobjectresource import Event, Todo, Journal
+from caldav.search import CalDAVSearcher
 
 from .checks_base import Check
 
@@ -105,7 +106,10 @@ class CheckMakeDeleteCalendar(Check):
             ## calendar creation must have gone OK.
             calmade = True
             self.checker.principal.calendar(cal_id=cal_id).events()
-            self.set_feature("create-calendar")
+            ## the caller takes care of setting quirk flag if mkcol
+            ## (todo - does this make sense?  Actually the whole _try_make_calendar looks messy to me and should probably be refactored)
+            if kwargs.get('method', 'mkcalendar') != 'mkcol':
+                self.set_feature("create-calendar")
             if kwargs.get("name"):
                 try:
                     name = "A calendar with this name should not exist"
@@ -121,7 +125,7 @@ class CheckMakeDeleteCalendar(Check):
                     except:
                         self.set_feature("create-calendar.set-displayname", False)
 
-        except Exception as e:
+        except DAVError as e:
             ## calendar creation created an exception.  Maybe the calendar exists?
             ## in any case, return exception
             cal = self.checker.principal.calendar(cal_id=cal_id)
@@ -144,11 +148,7 @@ class CheckMakeDeleteCalendar(Check):
             except NotFoundError:
                 cal = None
             ## Delete throw no exceptions, but was the calendar deleted?
-            if not cal or (
-                self.flags_checked.get(
-                    "non_existing_calendar_found" and len(events) == 0
-                )
-            ):
+            if not cal or self.checker.features_checked.is_supported('create-calendar.auto'):
                 self.set_feature("delete-calendar")
                 ## Calendar probably deleted OK.
                 ## (in the case of non_existing_calendar_found, we should add
@@ -176,7 +176,7 @@ class CheckMakeDeleteCalendar(Check):
                     )
                     return (calmade, e)
             return (calmade, None)
-        except Exception as e:
+        except DAVError as e:
             time.sleep(10)
             try:
                 cal.delete()
@@ -187,7 +187,7 @@ class CheckMakeDeleteCalendar(Check):
                         "behaviour": "deleting a recently created calendar causes exception",
                     },
                 )
-            except Exception as e2:
+            except DAVError as e2:
                 self.set_feature("delete-calendar", False)
             return (calmade, None)
 
@@ -258,7 +258,9 @@ class PrepareCalendar(Check):
     depends_on = {CheckMakeDeleteCalendar}
     features_to_be_checked = {
         "save-load.event.recurrences",
+        "save-load.event.recurrences.count",
         "save-load.todo.recurrences",
+        "save-load.todo.recurrences.count",
         "save-load.event",
         "save-load.todo",
         "save-load.todo.mixed-calendar",
@@ -336,7 +338,7 @@ class PrepareCalendar(Check):
                     uid="csc_simple_task1",
                     dtstart=date(2000, 1, 7),
                 )
-            except Exception as e: ## exception e for debugging purposes
+            except DAVError as e: ## exception e for debugging purposes
                 self.set_feature("save-load.todo", 'ungraceful')
                 return
 
@@ -346,7 +348,7 @@ class PrepareCalendar(Check):
 
         simple_event = add_if_not_existing(
             Event,
-            summary="simple event with a start time and an end time",
+            summary="Simple event with a start time and an end time",
             uid="csc_simple_event1",
             dtstart=datetime(2000, 1, 1, 12, 0, 0, tzinfo=utc),
             dtend=datetime(2000, 1, 1, 13, 0, 0, tzinfo=utc),
@@ -414,6 +416,24 @@ class PrepareCalendar(Check):
         recurring_event.load()
         self.set_feature("save-load.event.recurrences")
 
+        event_with_rrule_and_count = add_if_not_existing(Event, """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example Corp.//CalDAV Client//EN
+BEGIN:VEVENT
+UID:weeklymeeting
+DTSTAMP:20001013T151313Z
+DTSTART:20001018T140000Z
+DTEND:20001018T150000Z
+SUMMARY:Weekly meeting for three weeks
+RRULE:FREQ=WEEKLY;COUNT=3
+END:VEVENT
+END:VCALENDAR""")
+        event_with_rrule_and_count.load()
+        component = event_with_rrule_and_count.component
+        rrule = component.get('RRULE', None)
+        count = rrule and rrule.get('COUNT')
+        self.set_feature("save-load.event.recurrences.count", count==[3])
+
         recurring_task = add_if_not_existing(
             Todo,
             summary="monthly recurring task",
@@ -424,6 +444,27 @@ class PrepareCalendar(Check):
         )
         recurring_task.load()
         self.set_feature("save-load.todo.recurrences")
+
+        task_with_rrule_and_count = add_if_not_existing(Todo, """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example Corp.//CalDAV Client//EN
+BEGIN:VTODO
+UID:takeoutthethrash
+DTSTAMP:20001013T151313Z
+DTSTART:20001016T065500Z
+STATUS:NEEDS-ACTION
+DURATION:PT10M
+SUMMARY:Weekly task to be done three times
+RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=3
+CATEGORIES:CHORE
+PRIORITY:3
+END:VTODO
+END:VCALENDAR""")
+        task_with_rrule_and_count.load()
+        component = task_with_rrule_and_count.component
+        rrule = component.get('RRULE', None)
+        count = rrule and rrule.get('COUNT')
+        self.set_feature("save-load.todo.recurrences.count", count==[3])
 
         recurring_event_with_exception = add_if_not_existing(
             Event,
@@ -449,6 +490,14 @@ END:VEVENT
 END:VCALENDAR""",
         )
 
+        simple_event = add_if_not_existing(
+            Event,
+            description="Simple event without a summary",
+            uid="csc_simple_event_no_summary",
+            dtstart=datetime(2000, 3, 1, 12, 0, 0, tzinfo=utc),
+            dtend=datetime(2000, 3, 1, 13, 0, 0, tzinfo=utc),
+        )
+
         ## No more existing IDs in the calendar from 2000 ... otherwise,
         ## more work is needed to ensure those won't pollute the tests nor be
         ## deleted by accident
@@ -456,15 +505,33 @@ END:VCALENDAR""",
         assert self.checker.calendar.events()
         assert self.checker.tasklist.todos()
 
+class SearchMixIn:
+    ## Boilerplate
+    def search_find_set(self, cal_or_searcher, feature, num_expected=None, **search_args):
+        try:
+            results = cal_or_searcher.search(**search_args, post_filter=False)
+            cnt = len(results)
+            if num_expected is None:
+                is_good = cnt > 0
+            else:
+                is_good = cnt==num_expected
+            self.set_feature(feature, is_good)
+        except ReportError:
+            self.set_feature(feature, "ungraceful")
+    
 
-class CheckSearch(Check):
+class CheckSearch(Check, SearchMixIn):
     depends_on = {PrepareCalendar}
     features_to_be_checked = {
         "search.time-range.event",
-        "search.category",
-        "search.category.fullstring",
-        "search.category.fullstring.smart",
         "search.time-range.todo",
+        "search.text",
+        "search.text.case-sensitive",
+        "search.text.case-insensitive",
+        "search.text.substring",
+        "search.is-not-defined",
+        "search.text.category",
+        "search.text.category.substring",
         "search.comp-type-optional",
         "search.combined-is-logical-and",
     }  ## TODO: we can do so much better than this
@@ -472,48 +539,80 @@ class CheckSearch(Check):
     def _run_check(self):
         cal = self.checker.calendar
         tasklist = self.checker.tasklist
-        events = cal.search(
+        self.search_find_set(
+            cal, "search.time-range.event", 1, 
             start=datetime(2000, 1, 1, tzinfo=utc),
             end=datetime(2000, 1, 2, tzinfo=utc),
             event=True,
         )
-        self.set_feature("search.time-range.event", len(events) == 1)
-        tasks = tasklist.search(
+        self.search_find_set(
+            tasklist, "search.time-range.todo", 1,
             start=datetime(2000, 1, 9, tzinfo=utc),
             end=datetime(2000, 1, 10, tzinfo=utc),
             todo=True,
             include_completed=True,
         )
-        self.set_feature("search.time-range.todo", len(tasks) == 1)
 
-        ## search.category
-        try:
-            events = cal.search(category="hands", event=True)
-            self.set_feature("search.category", len(events) == 1)
-        except ReportError:
-            self.set_feature("search.category", "ungraceful")
-        if self.feature_checked("search.category", str) != 'ungraceful':
-            events = cal.search(category="hands,feet,head", event=True)
-            self.set_feature("search.category.fullstring", len(events) == 1)
-            if len(events) == 1:
-                events = cal.search(category="feet,head,hands", event=True)
-                self.set_feature("search.category.fullstring.smart", len(events) == 1)
+        ## summary search
+        self.search_find_set(
+            cal, "search.text", 1,
+            summary="Simple event with a start time and an end time",
+            event=True)
+
+        ## summary search is by default case sensitive
+        self.search_find_set(
+            cal, "search.text.case-sensitive", 0,
+            summary="simple event with a start time and an end time",
+            event=True)
+
+        ## summary search, case insensitive
+        searcher = CalDAVSearcher(event=True)
+        searcher.add_property_filter('summary', "simple event with a start time and an end time", case_sensitive=False)
+        self.search_find_set(
+            searcher, "search.text.case-insensitive", 1, calendar=cal)
+
+        ## is not defined search
+        searcher = CalDAVSearcher(event=True)
+        searcher.add_property_filter('summary', None, operator="undef")
+        self.search_find_set(
+            searcher, "search.is-not-defined", 1, calendar=cal)
+        
+        ## summary search, substring
+        ## The RFC says that TextMatch is a subetext search
+        self.search_find_set(
+            cal, "search.text.substring", 1,
+            summary="Simple event with a start time and",
+            event=True)
+
+        ## search.text.category
+        self.search_find_set(
+            cal, "search.text.category", 1,
+            category="hands", event=True)
 
         ## search.combined
-        if self.feature_checked("search.category"):
-            events1 = cal.search(category="hands", event=True, start=datetime(2000, 1, 1, 11, 0, 0), end=datetime(2000, 1, 13, 14, 0, 0))
-            events2 = cal.search(category="hands", event=True, start=datetime(2000, 1, 1, 9, 0, 0), end=datetime(2000, 1, 6, 14, 0, 0))
+        if self.feature_checked("search.text.category"):
+            events1 = cal.search(category="hands", event=True, start=datetime(2000, 1, 1, 11, 0, 0), end=datetime(2000, 1, 13, 14, 0, 0), post_filter=False)
+            events2 = cal.search(category="hands", event=True, start=datetime(2000, 1, 1, 9, 0, 0), end=datetime(2000, 1, 6, 14, 0, 0), post_filter=False)
             self.set_feature("search.combined-is-logical-and", len(events1) == 1 and len(events2) == 0)
-
+            self.search_find_set(
+                cal, "search.text.category.substring", 1,
+                category="eet",
+                event=True)
         try:
+            summary = "Simple event with a start time and"
+            ## Text search with and without comptype
+            tswc = cal.search(summary=summary, event=True, post_filter=False)
+            tswoc = cal.search(summary=summary, post_filter=False)
+            ## Testing if search without comp-type filter returns both events and tasks
             if self.feature_checked("search.time-range.todo"):
                 objects = cal.search(
                     start=datetime(2000, 1, 1, tzinfo=utc),
                     end=datetime(2001, 1, 1, tzinfo=utc),
+                    post_filter=False,
                 )
             else:
-                objects = _filter_2000(cal.search())
-            if len(objects) == 0:
+                objects = _filter_2000(cal.search(post_filter=False))
+            if len(objects) == 0 and not tswoc:
                 self.set_feature(
                     "search.comp-type-optional",
                     {
@@ -533,12 +632,15 @@ class CheckSearch(Check):
                 cal != tasklist
                 and len(objects)
                 + len(
+                    ## Also search tasklist without comp-type to see if we get all objects
                     tasklist.search(
                         start=datetime(2000, 1, 1, tzinfo=utc),
                         end=datetime(2001, 1, 1, tzinfo=utc),
+                        post_filter=False,
                     )
                 )
-                == self.checker.cnt
+                == self.checker.cnt and
+                (tswoc or not tswc)
             ):
                 self.set_feature(
                     "search.comp-type-optional",
@@ -547,7 +649,7 @@ class CheckSearch(Check):
                         "description": "comp-filter is redundant in search as a calendar can only hold one kind of components",
                     },
                 )
-            elif len(objects) == self.checker.cnt:
+            elif len(objects) == self.checker.cnt and (tswoc or not tswc):
                 self.set_feature("search.comp-type-optional")
             else:
                 ## TODO ... we need to do more testing on search to conclude certainly on this one.  But at least we get something out.
@@ -562,7 +664,7 @@ class CheckSearch(Check):
             self.set_feature("search.comp-type-optional", {"support": "ungraceful"})
 
 
-class CheckRecurrenceSearch(Check):
+class CheckRecurrenceSearch(Check, SearchMixIn):
     depends_on = {CheckSearch}
     features_to_be_checked = {
         "search.recurrences.includes-implicit.todo",
@@ -624,6 +726,10 @@ class CheckRecurrenceSearch(Check):
             event=True,
             post_filter=False,
         )
+        ## Xandikos version 0.2.12 breaks here for me.
+        ## It didn't break earlier.
+        ## Everything is exactly the same here.  Same data on the server, same query
+        ## There must be some local state in xandikos causing some bug to happen
         assert len(exception) == 1
         far_future_recurrence = cal.search(
             start=datetime(2045, 3, 12, tzinfo=utc),
