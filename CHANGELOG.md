@@ -6,6 +6,25 @@ This file should adhere to [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 This project should adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html), though some earlier releases may be incompatible with the SemVer standard.
 
+## [Unreleased]
+
+### Added
+- Expanded search feature coverage with new feature flags:
+  - `search.text` - Basic text/summary search
+  - `search.text.case-sensitive` - Case-sensitive text matching (default behavior)
+  - `search.text.case-insensitive` - Case-insensitive text matching via CalDAVSearcher
+  - `search.text.substring` - Substring matching for text searches
+  - `search.is-not-defined` - Property filter with is-not-defined operator
+  - `search.text.category` - Category search support
+  - `search.text.category.substring` - Substring matching for category searches
+- `post_filter=False` parameter to all server behavior tests to ensure testing actual server responses
+
+### Changed
+- Improved `search.comp-type-optional` test with additional text search validation
+
+### Fixed
+- `create-calendar` feature detection to not incorrectly mark mkcol method as standard calendar creation
+
 ## [0.1] - [2025-11-08]
 
 This release corresponds with the caldav version 2.1.2
