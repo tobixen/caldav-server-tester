@@ -18,6 +18,11 @@ This project should adhere to [Semantic Versioning](https://semver.org/spec/v2.0
   - `search.text.category` - Category search support
   - `search.text.category.substring` - Substring matching for category searches
 - `post_filter=False` parameter to all server behavior tests to ensure testing actual server responses
+- New `CheckSyncToken` check class for RFC6578 sync-collection reports:
+  - Tests for sync token support (full/fragile/unsupported)
+  - Detects time-based sync tokens (second-precision, requires sleep(1) between operations)
+  - Detects fragile sync tokens (occasionally returns extra content due to race conditions)
+  - Tests sync-collection reports after object deletion
 
 ### Changed
 - Improved `search.comp-type-optional` test with additional text search validation

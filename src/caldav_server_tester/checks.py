@@ -576,7 +576,7 @@ class CheckSearch(Check, SearchMixIn):
         searcher.add_property_filter('summary', None, operator="undef")
         self.search_find_set(
             searcher, "search.is-not-defined", 1, calendar=cal)
-        
+
         ## summary search, substring
         ## The RFC says that TextMatch is a subetext search
         self.search_find_set(
@@ -676,7 +676,7 @@ class CheckRecurrenceSearch(Check, SearchMixIn):
         "search.recurrences.expanded.exception",
     }
 
-    def _run_check(self):
+    def _run_check(self) -> None:
         cal = self.checker.calendar
         tl = self.checker.tasklist
         events = cal.search(
@@ -784,3 +784,119 @@ class CheckRecurrenceSearch(Check, SearchMixIn):
             == "February recurrence with different summary"
             and getattr(exception[0].component.get('RECURRENCE_ID'), 'dt', None) == datetime(2000, 2, 13, 12, tzinfo=utc)
         )
+
+
+class CheckSyncToken(Check):
+    """
+    Checks support for RFC6578 sync-collection reports (sync tokens)
+
+    Tests for four known issues:
+    1. No sync token support at all
+    2. Time-based sync tokens (second-precision, requires sleep between ops)
+    3. Fragile sync tokens (returns extra content, race conditions)
+    4. Sync breaks on delete (server fails after object deletion)
+    """
+
+    depends_on = {PrepareCalendar}
+    features_to_be_checked = {
+        "sync-token",
+        "sync-token.delete",
+    }
+
+    def _run_check(self) -> None:
+        cal = self.checker.calendar
+
+        ## Test 1: Check if sync tokens are supported at all
+        try:
+            my_objects = cal.objects()
+            sync_token = my_objects.sync_token
+
+            if not sync_token or sync_token == "":
+                self.set_feature("sync-token", False)
+                return
+
+            ## Initially assume full support
+            sync_support = "full"
+            sync_behaviour = None
+        except (ReportError, DAVError, AttributeError):
+            self.set_feature("sync-token", False)
+            return
+
+        ## Test 2 & 3: Check for time-based and fragile sync tokens
+        ## Create a new event
+        test_event = cal.save_event(
+            Event,
+            summary="Sync token test event",
+            uid="csc_sync_test_event_1",
+            dtstart=datetime(2000, 4, 1, 12, 0, 0, tzinfo=utc),
+            dtend=datetime(2000, 4, 1, 13, 0, 0, tzinfo=utc),
+        )
+
+        ## Get objects with new sync token
+        my_objects = cal.objects()
+        sync_token1 = my_objects.sync_token
+
+        ## Immediately check for changes (should be none)
+        my_changed_objects = cal.objects_by_sync_token(sync_token=sync_token1)
+        immediate_count = len(list(my_changed_objects))
+
+        if immediate_count > 0:
+            ## Fragile sync tokens return extra content
+            sync_support = "fragile"
+
+        ## Test for time-based sync tokens
+        ## Modify the event within the same second
+        test_event.icalendar_instance.subcomponents[0]["SUMMARY"] = "Modified immediately"
+        test_event.save()
+
+        ## Check for changes immediately (time-based tokens need sleep(1))
+        my_changed_objects = cal.objects_by_sync_token(sync_token=sync_token1)
+        changed_count_no_sleep = len(list(my_changed_objects))
+
+        if changed_count_no_sleep == 0:
+            ## Might be time-based, wait a second and try again
+            time.sleep(1)
+            test_event.icalendar_instance.subcomponents[0]["SUMMARY"] = "Modified after sleep"
+            test_event.save()
+            time.sleep(1)
+
+            my_changed_objects = cal.objects_by_sync_token(sync_token=sync_token1)
+            changed_count_with_sleep = len(list(my_changed_objects))
+
+            if changed_count_with_sleep >= 1:
+                sync_behaviour = "time-based"
+            else:
+                ## Sync tokens might be completely broken
+                sync_support = "broken"
+
+        ## Set the sync-token feature with support and behaviour
+        if sync_behaviour:
+            self.set_feature("sync-token", {"support": sync_support, "behaviour": sync_behaviour})
+        else:
+            self.set_feature("sync-token", {"support": sync_support})
+
+        ## Test 4: Check if sync breaks on delete
+        sync_token2 = my_changed_objects.sync_token
+
+        ## Sleep if needed
+        if sync_behaviour == "time-based":
+            time.sleep(1)
+
+        ## Delete the test event
+        test_event.delete()
+
+        if sync_behaviour == "time-based":
+            time.sleep(1)
+
+        try:
+            my_changed_objects = cal.objects_by_sync_token(sync_token=sync_token2)
+            deleted_count = len(list(my_changed_objects))
+
+            ## If we get here without exception, deletion is supported
+            self.set_feature("sync-token.delete", True)
+        except DAVError as e:
+            ## Some servers (like sabre-based) return "418 I'm a teapot" or other errors
+            self.set_feature("sync-token.delete", {
+                "support": "unsupported",
+                "behaviour": f"sync fails after deletion: {e}"
+            })

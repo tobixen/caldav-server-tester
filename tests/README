@@ -1,0 +1,3 @@
+The files with names *_ai_* is AI-generated.  I do believe that AI-generated test code is better than no test code.
+
+If bugfixes, refactorings and feature fixing causes tsts to break and you think it's probable that the code changes are good but the test code is not good, then it's fair to just remove the broken tests.
