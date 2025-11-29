@@ -824,7 +824,7 @@ class CheckSyncToken(Check):
 
         ## Test 2 & 3: Check for time-based and fragile sync tokens
         ## Create a new event
-        test_event = cal.save_event(
+        test_event = cal.save_object(
             Event,
             summary="Sync token test event",
             uid="csc_sync_test_event_1",
