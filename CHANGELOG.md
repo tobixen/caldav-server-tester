@@ -23,6 +23,9 @@ This project should adhere to [Semantic Versioning](https://semver.org/spec/v2.0
   - Detects time-based sync tokens (second-precision, requires sleep(1) between operations)
   - Detects fragile sync tokens (occasionally returns extra content due to race conditions)
   - Tests sync-collection reports after object deletion
+- New `CheckAlarmSearch` check class for alarm time-range searches (RFC4791 section 9.9):
+  - Tests if server supports searching for events based on when their alarms trigger
+  - Verifies correct filtering of alarm times vs event times
 
 ### Changed
 - Improved `search.comp-type-optional` test with additional text search validation
