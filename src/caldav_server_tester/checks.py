@@ -888,11 +888,11 @@ class CheckDuplicateUID(Check):
     duplicates.
 
     Tests:
-    - duplicate-uid.cross-calendar: Can events with same UID exist in different calendars?
+    - save.duplicate-uid.cross-calendar: Can events with same UID exist in different calendars?
     """
 
     depends_on = {PrepareCalendar}
-    features_to_be_checked = {"duplicate-uid.cross-calendar"}
+    features_to_be_checked = {"save.duplicate-uid.cross-calendar"}
 
     def _run_check(self) -> None:
         cal1 = self.checker.calendar
@@ -945,7 +945,7 @@ END:VCALENDAR"""
 
                 if len(events_in_cal2) == 0:
                     ## Server silently ignored the duplicate
-                    self.set_feature("duplicate-uid.cross-calendar", {
+                    self.set_feature("save.duplicate-uid.cross-calendar", {
                         "support": "unsupported",
                         "behaviour": "silently-ignored"
                     })
@@ -961,21 +961,21 @@ END:VCALENDAR"""
 
                     event1.load()
                     if 'Test Event Cal1' in str(event1.icalendar_instance):
-                        self.set_feature("duplicate-uid.cross-calendar", True)
+                        self.set_feature("save.duplicate-uid.cross-calendar", True)
                     else:
-                        self.set_feature("duplicate-uid.cross-calendar", {
+                        self.set_feature("save.duplicate-uid.cross-calendar", {
                             "support": "fragile",
                             "behaviour": "Modifying duplicate in one calendar affects the other"
                         })
                 else:
-                    self.set_feature("duplicate-uid.cross-calendar", {
+                    self.set_feature("save.duplicate-uid.cross-calendar", {
                         "support": "fragile",
                         "behaviour": f"Unexpected: {len(events_in_cal2)} events in cal2"
                     })
 
             except (DAVError, AuthorizationError) as e:
                 ## Server rejected the duplicate with an error
-                self.set_feature("duplicate-uid.cross-calendar", {
+                self.set_feature("save.duplicate-uid.cross-calendar", {
                     "support": "ungraceful",
                     "behaviour": f"Server error: {type(e).__name__}"
                 })

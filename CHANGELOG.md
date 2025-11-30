@@ -32,7 +32,7 @@ This project should adhere to [Semantic Versioning](https://semver.org/spec/v2.0
   - Tests listing all principals (`principal-search.list-all`)
   - Note: Full `principal-search.by-name` testing requires multiple users and is not yet implemented
 - New `CheckDuplicateUID` check class for duplicate UID handling:
-  - Tests if server allows events with same UID in different calendars (`duplicate-uid.cross-calendar`)
+  - Tests if server allows events with same UID in different calendars (`save.duplicate-uid.cross-calendar`)
   - Detects if duplicates are silently ignored or rejected with errors
   - Verifies events are treated as separate entities when allowed
 
