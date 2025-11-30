@@ -879,6 +879,123 @@ class CheckPrincipalSearch(Check):
             })
 
 
+class CheckDuplicateUID(Check):
+    """
+    Checks how server handles events with duplicate UIDs across calendars.
+
+    Some servers allow the same UID in different calendars (treating them
+    as separate entities), while others may throw errors or silently ignore
+    duplicates.
+
+    Tests:
+    - duplicate-uid.cross-calendar: Can events with same UID exist in different calendars?
+    """
+
+    depends_on = {PrepareCalendar}
+    features_to_be_checked = {"duplicate-uid.cross-calendar"}
+
+    def _run_check(self) -> None:
+        cal1 = self.checker.calendar
+
+        ## Create a second calendar for testing
+        test_uid = "csc_duplicate_uid_test"
+        cal2_name = "csc_duplicate_uid_cal2"
+
+        ## Pre-cleanup: remove any existing test events and calendar
+        for obj in _filter_2000(cal1.objects()):
+            if obj.icalendar_instance.walk('vevent'):
+                for event in obj.icalendar_instance.walk('vevent'):
+                    if hasattr(event, 'uid') and str(event.get('uid', '')).startswith(test_uid):
+                        obj.delete()
+                        break
+
+        ## Try to find and delete existing test calendar
+        try:
+            for cal in self.checker.client.principal().calendars():
+                if cal.name == cal2_name:
+                    cal.delete()
+                    break
+        except Exception:
+            pass
+
+        try:
+            ## Create test event in first calendar
+            event_ical = f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VEVENT
+UID:{test_uid}
+DTSTART:20000101T120000Z
+DTEND:20000101T130000Z
+SUMMARY:Test Event Cal1
+END:VEVENT
+END:VCALENDAR"""
+
+            event1 = cal1.save_object(Event, event_ical)
+
+            ## Create second calendar
+            cal2 = self.checker.client.principal().make_calendar(name=cal2_name)
+
+            try:
+                ## Try to save event with same UID to second calendar
+                event2 = cal2.save_object(Event, event_ical.replace("Test Event Cal1", "Test Event Cal2"))
+
+                ## Check if the event actually exists in cal2
+                events_in_cal2 = list(_filter_2000(cal2.events()))
+
+                if len(events_in_cal2) == 0:
+                    ## Server silently ignored the duplicate
+                    self.set_feature("duplicate-uid.cross-calendar", {
+                        "support": "unsupported",
+                        "behaviour": "silently-ignored"
+                    })
+                elif len(events_in_cal2) == 1:
+                    ## Server accepted the duplicate
+                    ## Verify they are treated as separate entities
+                    events_in_cal1 = list(_filter_2000(cal1.events()))
+                    assert len(events_in_cal1) == 1
+
+                    ## Modify event in cal2 and verify cal1's event is unchanged
+                    event2.icalendar_instance.walk('vevent')[0]['summary'] = "Modified in Cal2"
+                    event2.save()
+
+                    event1.load()
+                    if 'Test Event Cal1' in str(event1.icalendar_instance):
+                        self.set_feature("duplicate-uid.cross-calendar", True)
+                    else:
+                        self.set_feature("duplicate-uid.cross-calendar", {
+                            "support": "fragile",
+                            "behaviour": "Modifying duplicate in one calendar affects the other"
+                        })
+                else:
+                    self.set_feature("duplicate-uid.cross-calendar", {
+                        "support": "fragile",
+                        "behaviour": f"Unexpected: {len(events_in_cal2)} events in cal2"
+                    })
+
+            except (DAVError, AuthorizationError) as e:
+                ## Server rejected the duplicate with an error
+                self.set_feature("duplicate-uid.cross-calendar", {
+                    "support": "ungraceful",
+                    "behaviour": f"Server error: {type(e).__name__}"
+                })
+            finally:
+                ## Cleanup
+                try:
+                    cal2.delete()
+                except Exception:
+                    pass
+
+        finally:
+            ## Cleanup test event from cal1
+            for obj in _filter_2000(cal1.objects()):
+                if obj.icalendar_instance.walk('vevent'):
+                    for event in obj.icalendar_instance.walk('vevent'):
+                        if hasattr(event, 'uid') and str(event.get('uid', '')).startswith(test_uid):
+                            obj.delete()
+                            break
+
+
 class CheckAlarmSearch(Check):
     """
     Checks support for time-range searches on alarms (RFC4791 section 9.9)
