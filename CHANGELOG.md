@@ -26,6 +26,11 @@ This project should adhere to [Semantic Versioning](https://semver.org/spec/v2.0
 - New `CheckAlarmSearch` check class for alarm time-range searches (RFC4791 section 9.9):
   - Tests if server supports searching for events based on when their alarms trigger
   - Verifies correct filtering of alarm times vs event times
+- New `CheckPrincipalSearch` check class for principal search operations:
+  - Tests basic principal access
+  - Tests searching for own principal by display name (`principal-search.by-name.self`)
+  - Tests listing all principals (`principal-search.list-all`)
+  - Note: Full `principal-search.by-name` testing requires multiple users and is not yet implemented
 
 ### Changed
 - Improved `search.comp-type-optional` test with additional text search validation

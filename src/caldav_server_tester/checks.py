@@ -787,6 +787,98 @@ class CheckRecurrenceSearch(Check, SearchMixIn):
         )
 
 
+class CheckPrincipalSearch(Check):
+    """
+    Checks support for principal search operations
+
+    Tests three capabilities:
+    - principal-search: General ability to search for principals
+    - principal-search.by-name.self: Search for own principal by name
+    - principal-search.list-all: List all principals without filter
+
+    Note: principal-search.by-name (general name search) is not tested
+    as it requires setting up another user with a known name.
+    """
+
+    depends_on = set()  # No dependencies, uses client connection
+    features_to_be_checked = {
+        "principal-search",
+        "principal-search.by-name.self",
+        "principal-search.list-all",
+    }
+
+    def _run_check(self) -> None:
+        client = self.checker.client
+
+        ## Test 1: Basic principal search capability
+        ## Try to get the current principal first
+        try:
+            principal = client.principal()
+            self.set_feature("principal-search", True)
+        except (ReportError, DAVError, AuthorizationError) as e:
+            ## If we can't even get our own principal, mark all as unsupported
+            self.set_feature("principal-search", {
+                "support": "unsupported",
+                "behaviour": f"Cannot access principal: {e}"
+            })
+            self.set_feature("principal-search.by-name.self", False)
+            self.set_feature("principal-search.list-all", False)
+            return
+
+        ## Test 2: Search for own principal by name
+        try:
+            my_name = principal.get_display_name()
+            if my_name:
+                my_principals = client.principals(name=my_name)
+                if isinstance(my_principals, list) and len(my_principals) == 1:
+                    if my_principals[0].url == principal.url:
+                        self.set_feature("principal-search.by-name.self", True)
+                    else:
+                        self.set_feature("principal-search.by-name.self", {
+                            "support": "fragile",
+                            "behaviour": "Returns wrong principal"
+                        })
+                elif len(my_principals) == 0:
+                    self.set_feature("principal-search.by-name.self", {
+                        "support": "unsupported",
+                        "behaviour": "Search by own name returns nothing"
+                    })
+                else:
+                    self.set_feature("principal-search.by-name.self", {
+                        "support": "fragile",
+                        "behaviour": f"Returns {len(my_principals)} principals instead of 1"
+                    })
+            else:
+                ## No display name, can't test
+                self.set_feature("principal-search.by-name.self", {
+                    "support": "unknown",
+                    "behaviour": "No display name available to test"
+                })
+        except (ReportError, DAVError, AuthorizationError) as e:
+            self.set_feature("principal-search.by-name.self", {
+                "support": "unsupported",
+                "behaviour": f"Search by name failed: {e}"
+            })
+
+        ## Test 3: List all principals
+        try:
+            all_principals = client.principals()
+            if isinstance(all_principals, list):
+                ## Some servers return empty list, some return principals
+                ## Both are valid - we just care if it doesn't throw an error
+                self.set_feature("principal-search.list-all", True)
+            else:
+                self.set_feature("principal-search.list-all", {
+                    "support": "fragile",
+                    "behaviour": "principals() didn't return a list"
+                })
+        except (ReportError, DAVError, AuthorizationError) as e:
+            self.set_feature("principal-search.list-all", {
+                "support": "unsupported",
+                "behaviour": f"List all principals failed: {e}"
+            })
+
+
 class CheckAlarmSearch(Check):
     """
     Checks support for time-range searches on alarms (RFC4791 section 9.9)
