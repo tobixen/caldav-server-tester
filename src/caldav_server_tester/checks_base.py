@@ -59,7 +59,8 @@ class Check:
             return
 
         ## Fragile support is ... fragile and should be ignored
-        if sup == 'fragile' or self.expected_features.is_supported(feature, str) == 'fragile':
+        ## same with unknonw
+        if sup in ('fragile', 'unknown') or self.expected_features.is_supported(feature, str) in ('fragile', 'unknown'):
             return
 
         expected_ = self.expected_features.is_supported(feature, dict)
@@ -80,7 +81,7 @@ class Check:
             if self.checker.debug_mode == 'logging':
                 logging.error(f"Server checker found something unexpected for {feature}.  Expected: {expected_}, observed: {fc[feature]}")
             elif self.checker.debug_mode == 'pdb':
-                import pdb; pdb.set_trace()
+                breakpoint()
             else:
                 assert(False)
 

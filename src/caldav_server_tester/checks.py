@@ -15,7 +15,6 @@ from .checks_base import Check
 
 utc = timezone.utc
 
-
 def _filter_2000(objects):
     """Sometimes the only chance we have to run checks towards some cloud
     service is to run the checks towards some existing important
@@ -251,8 +250,14 @@ class CheckMakeDeleteCalendar(Check):
 
 
 class PrepareCalendar(Check):
-    """
-    This "check" doesn't check anything, but ensures the calendar has some known events
+    """This "check" was not supposed to check anything, only ensure
+    that the calendar has some known events and tasks.  However, as
+    some calendars don't even supports saving and loading all kind of
+    component types, checks that it's possible to save/load those have
+    been thrown in here.
+
+    TODO: can the logic behind save-load.* be consolidated and moved
+    into the add_if_not_existing?
     """
 
     features_to_be_checked = set()
@@ -265,6 +270,7 @@ class PrepareCalendar(Check):
         "save-load.event",
         "save-load.todo",
         "save-load.todo.mixed-calendar",
+        "save-load.journal"
     }
 
     def _run_check(self):
@@ -356,6 +362,27 @@ class PrepareCalendar(Check):
         )
         simple_event.load()
         self.set_feature("save-load.event")
+
+        if not self.checker.features_checked.is_supported("save-load.todo.mixed-calendar"):
+            journals = self.checker.principal.make_calendar(
+                    cal_id=f"{cal_id}_journals",
+                    name=f"{name} - journals",
+                    supported_calendar_component_set=["VJOURNAL"])
+        else:
+            journals = self.checker.calendar
+        self.checker.journals = journals
+        try:
+            j = journals.add_journal(
+                summary="journal test",
+                dtstart=datetime(2000, 6, 1),
+                description="This is a journal entry",
+                uid="csc_journal_1")
+            j.load()
+            self.set_feature("save-load.journal")
+        except NotFoundError as e:
+            self.set_feature("save-load.journal", 'unsupported')
+        except DAVError as e:
+            self.set_feature("save-load.journal", 'ungraceful')
 
         non_duration_event = add_if_not_existing(
             Event,
@@ -1218,3 +1245,51 @@ class CheckSyncToken(Check):
                     test_event.delete()
                 except:
                     pass
+
+
+class CheckFreeBusyQuery(Check):
+    """
+    Checks support for RFC4791 free/busy-query REPORT
+
+    Tests if the server supports free/busy queries as specified in RFC4791 section 7.10.
+    The free/busy query allows clients to retrieve free/busy information for a time range.
+    """
+
+    depends_on = {PrepareCalendar}
+    features_to_be_checked = {
+        "freebusy-query.rfc4791",
+    }
+
+    def _run_check(self) -> None:
+        cal = self.checker.calendar
+
+        try:
+            ## Try to perform a simple freebusy query
+            ## Use a time range in year 2000 to avoid conflicts with real calendar data
+            start = datetime(2000, 1, 1, 0, 0, 0, tzinfo=utc)
+            end = datetime(2000, 1, 31, 23, 59, 59, tzinfo=utc)
+
+            freebusy = cal.freebusy_request(start, end)
+
+            ## If we got here without exception, the feature is supported
+            ## Verify we got a valid freebusy object
+            if freebusy and hasattr(freebusy, 'vobject_instance'):
+                self.set_feature("freebusy-query.rfc4791", True)
+            else:
+                self.set_feature("freebusy-query.rfc4791", {
+                    "support": "ungraceful",
+                    "behaviour": "freebusy query returned invalid or empty response"
+                })
+        except (ReportError, DAVError, NotFoundError) as e:
+            ## Server doesn't support freebusy queries
+            ## Common responses: 500 Internal Server Error, 501 Not Implemented
+            self.set_feature("freebusy-query.rfc4791", {
+                "support": "unsupported",
+                "behaviour": f"freebusy query failed: {e}"
+            })
+        except Exception as e:
+            ## Unexpected error
+            self.set_feature("freebusy-query.rfc4791", {
+                "support": "broken",
+                "behaviour": f"unexpected error during freebusy query: {e}"
+            })

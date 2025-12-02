@@ -21,6 +21,7 @@ class ServerQuirkChecker:
         self._default_calendar = None
         self._checks_run = set()  ## checks that has already been running
         self.expected_features = self._client_obj.features
+        self.principal = self._client_obj.principal()
         self.debug_mode = debug_mode
 
     def check_all(self):
@@ -80,7 +81,7 @@ class ServerQuirkChecker:
         ret = {
             "caldav_version": caldav.__version__,
             "ts": time.time(),
-            "name": getattr(self._client_obj, "server_name"),
+            "name": getattr(self._client_obj, "server_name", "(noname)"),
             "url": str(self._client_obj.url),
             "features": self._features_checked.dotted_feature_set_list(compact=True),
             "error": "Not fully implemnted yet - TODO",
