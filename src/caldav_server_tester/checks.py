@@ -364,10 +364,13 @@ class PrepareCalendar(Check):
         self.set_feature("save-load.event")
 
         if not self.checker.features_checked.is_supported("save-load.todo.mixed-calendar"):
-            journals = self.checker.principal.make_calendar(
+            try:
+                journals = self.checker.principal.make_calendar(
                     cal_id=f"{cal_id}_journals",
                     name=f"{name} - journals",
                     supported_calendar_component_set=["VJOURNAL"])
+            except:
+                journals = self.checker.calendar
         else:
             journals = self.checker.calendar
         self.checker.journals = journals
@@ -443,7 +446,6 @@ class PrepareCalendar(Check):
         )
         recurring_event.load()
         self.set_feature("save-load.event.recurrences")
-
         event_with_rrule_and_count = add_if_not_existing(Event, """BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Example Corp.//CalDAV Client//EN
@@ -734,6 +736,7 @@ class CheckRecurrenceSearch(Check, SearchMixIn):
             event=True,
             post_filter=False,
         )
+
         ## Check if server returns accurate time-range results
         ## Some servers return events that fall outside the requested time range
         ## Expected: only csc_monthly_recurring_event (recurrence at 2000-02-12 12:00)
@@ -939,8 +942,8 @@ class CheckDuplicateUID(Check):
     def _run_check(self) -> None:
         cal1 = self.checker.calendar
 
-        ## Create a second calendar for testing
-        test_uid = "csc_duplicate_uid_test"
+        ## Reuse an event from PrepareCalendar instead of creating a new one
+        test_uid = "csc_simple_event1"
         cal2_name = "csc_duplicate_uid_cal2"
 
         ## Try to find and delete existing cal2 test calendar
@@ -953,26 +956,19 @@ class CheckDuplicateUID(Check):
             pass
 
         try:
-            ## Create test event in first calendar
-            event_ical = f"""BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//Test//Test//EN
-BEGIN:VEVENT
-UID:{test_uid}
-DTSTART:20000101T120000Z
-DTEND:20000101T130000Z
-SUMMARY:Test Event Cal1
-END:VEVENT
-END:VCALENDAR"""
+            ## Get existing event from first calendar (created by PrepareCalendar)
+            event1 = cal1.event_by_uid(test_uid)
+            event1.load()
 
-            event1 = cal1.save_object(Event, event_ical)
+            ## Get the event data for reuse in cal2
+            event_ical = event1.data
 
             ## Create second calendar
             cal2 = self.client.principal().make_calendar(name=cal2_name)
 
             try:
                 ## Try to save event with same UID to second calendar
-                event2 = cal2.save_object(Event, event_ical.replace("Test Event Cal1", "Test Event Cal2"))
+                event2 = cal2.save_object(Event, event_ical)
 
                 ## Check if the event actually exists in cal2
                 events_in_cal2 = list(_filter_2000(cal2.events()))
@@ -988,13 +984,18 @@ END:VCALENDAR"""
                     ## Server accepted the duplicate
                     ## Verify they are treated as separate entities.
                     event1 = cal1.event_by_uid(test_uid)
+                    event1.load()
+
+                    ## Store original summary to check later
+                    original_summary = str(event1.icalendar_instance.walk('vevent')[0].get('summary', ''))
 
                     ## Modify event in cal2 and verify cal1's event is unchanged
                     event2.icalendar_instance.walk('vevent')[0]['summary'] = "Modified in Cal2"
                     event2.save()
 
                     event1.load()
-                    if 'Test Event Cal1' in str(event1.icalendar_instance):
+                    current_summary = str(event1.icalendar_instance.walk('vevent')[0].get('summary', ''))
+                    if current_summary == original_summary:
                         self.set_feature("save.duplicate-uid.cross-calendar", True)
                     else:
                         self.set_feature("save.duplicate-uid.cross-calendar", {
@@ -1021,8 +1022,8 @@ END:VCALENDAR"""
                     pass
 
         finally:
-            ## Cleanup test event from cal1
-            cal1.event_by_uid(test_uid).delete()
+            ## No need to cleanup test event - it's owned by PrepareCalendar
+            pass
 
 
 class CheckAlarmSearch(Check):
@@ -1277,14 +1278,14 @@ class CheckFreeBusyQuery(Check):
                 self.set_feature("freebusy-query.rfc4791", True)
             else:
                 self.set_feature("freebusy-query.rfc4791", {
-                    "support": "ungraceful",
+                    "support": "unsupported",
                     "behaviour": "freebusy query returned invalid or empty response"
                 })
         except (ReportError, DAVError, NotFoundError) as e:
             ## Server doesn't support freebusy queries
             ## Common responses: 500 Internal Server Error, 501 Not Implemented
             self.set_feature("freebusy-query.rfc4791", {
-                "support": "unsupported",
+                "support": "ungraceful",
                 "behaviour": f"freebusy query failed: {e}"
             })
         except Exception as e:
