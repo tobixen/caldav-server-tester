@@ -421,7 +421,7 @@ class PrepareCalendar(Check):
 VERSION:2.0
 PRODID:-//Example Corp.//CalDAV Client//EN
 BEGIN:VEVENT
-UID:weeklymeeting
+UID:csc_weeklymeeting
 DTSTAMP:20001013T151313Z
 DTSTART:20001018T140000Z
 DTEND:20001018T150000Z
@@ -450,13 +450,13 @@ END:VCALENDAR""")
 VERSION:2.0
 PRODID:-//Example Corp.//CalDAV Client//EN
 BEGIN:VTODO
-UID:takeoutthethrash
+UID:csc_task_with_count
 DTSTAMP:20001013T151313Z
 DTSTART:20001016T065500Z
 STATUS:NEEDS-ACTION
 DURATION:PT10M
 SUMMARY:Weekly task to be done three times
-RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=3
+RRULE:FREQ=WEEKLY;COUNT=3
 CATEGORIES:CHORE
 PRIORITY:3
 END:VTODO
@@ -535,7 +535,7 @@ class CheckSearch(Check, SearchMixIn):
         "search.text.category.substring",
         "search.comp-type-optional",
         "search.combined-is-logical-and",
-    }  ## TODO: we can do so much better than this
+    }  ## TODO: there are still lots of corner cases to be considered, particularly wrg of time-range searches
 
     def _run_check(self):
         cal = self.checker.calendar
@@ -668,6 +668,7 @@ class CheckSearch(Check, SearchMixIn):
 class CheckRecurrenceSearch(Check, SearchMixIn):
     depends_on = {CheckSearch}
     features_to_be_checked = {
+        "search.time-range.accurate",
         "search.recurrences.includes-implicit.todo",
         "search.recurrences.includes-implicit.todo.pending",
         "search.recurrences.includes-implicit.event",
@@ -686,7 +687,10 @@ class CheckRecurrenceSearch(Check, SearchMixIn):
             event=True,
             post_filter=False,
         )
-        assert len(events) == 1
+        ## This is a basic sanity check - there should be at least one event
+        ## (the monthly recurring event with dtstart 2000-01-12)
+        ## Some servers may incorrectly return additional events
+        assert len(events) >= 1
         if self.checker.features_checked.is_supported("search.time-range.todo"):
             todos = tl.search(
                 start=datetime(2000, 1, 12, tzinfo=utc),
@@ -695,14 +699,21 @@ class CheckRecurrenceSearch(Check, SearchMixIn):
                 include_completed=True,
                 post_filter=False,
             )
-            assert len(todos) == 1
+            ## Basic sanity check - should find at least the recurring task
+            assert len(todos) >= 1
         events = cal.search(
             start=datetime(2000, 2, 12, tzinfo=utc),
             end=datetime(2000, 2, 13, tzinfo=utc),
             event=True,
             post_filter=False,
         )
-        self.set_feature("search.recurrences.includes-implicit.event", len(events) == 1)
+        ## Check if server returns accurate time-range results
+        ## Some servers return events that fall outside the requested time range
+        ## Expected: only csc_monthly_recurring_event (recurrence at 2000-02-12 12:00)
+        ## Buggy behavior: also returns csc_monthly_recurring_with_exception (2000-02-13 12:00, outside range)
+        ##                 and possibly csc_weeklymeeting (no February recurrence at all)
+        self.set_feature("search.time-range.accurate", len(events) <= 1)
+        self.set_feature("search.recurrences.includes-implicit.event", len(events) >= 1)
         todos1 = tl.search(
             start=datetime(2000, 2, 12, tzinfo=utc),
             end=datetime(2000, 2, 13, tzinfo=utc),
@@ -731,7 +742,12 @@ class CheckRecurrenceSearch(Check, SearchMixIn):
         ## It didn't break earlier.
         ## Everything is exactly the same here.  Same data on the server, same query
         ## There must be some local state in xandikos causing some bug to happen
-        assert len(exception) == 1
+        ## If the server has accurate time-range searches, we expect exactly 1 result
+        ## Otherwise, we just check that we got at least one result
+        if self.feature_checked("search.time-range.accurate"):
+            assert len(exception) == 1
+        else:
+            assert len(exception) >= 1
         far_future_recurrence = cal.search(
             start=datetime(2045, 3, 12, tzinfo=utc),
             end=datetime(2045, 3, 13, tzinfo=utc),
@@ -788,79 +804,78 @@ class CheckRecurrenceSearch(Check, SearchMixIn):
 
 
 class CheckPrincipalSearch(Check):
-    """
-    Checks support for principal search operations
+    """Checks support for principal search operations
 
-    Tests three capabilities:
-    - principal-search: General ability to search for principals
+    Tests those capabilities:
     - principal-search.by-name.self: Search for own principal by name
     - principal-search.list-all: List all principals without filter
 
-    Note: principal-search.by-name (general name search) is not tested
-    as it requires setting up another user with a known name.
+    TODO: principal-search.by-name (general name search) is not tested
+    as it requires setting up another user with a known name.  What
+    we're really testing is principal-search.by-name.self, and then we
+    assume principal-search.by-name is the same.
+
+    TODO: if get-current-user-principal is not supported, we cannot
+    test the rest, and we assume they are broken
+
     """
 
-    depends_on = set()  # No dependencies, uses client connection
+    depends_on = { CheckGetCurrentUserPrincipal }
     features_to_be_checked = {
-        "principal-search",
-        "principal-search.by-name.self",
         "principal-search.list-all",
+        "principal-search.by-name",
     }
 
     def _run_check(self) -> None:
-        client = self.checker.client
+        client = self.client
 
-        ## Test 1: Basic principal search capability
-        ## Try to get the current principal first
-        try:
-            principal = client.principal()
-            self.set_feature("principal-search", True)
-        except (ReportError, DAVError, AuthorizationError) as e:
-            ## If we can't even get our own principal, mark all as unsupported
-            self.set_feature("principal-search", {
-                "support": "unsupported",
-                "behaviour": f"Cannot access principal: {e}"
-            })
-            self.set_feature("principal-search.by-name.self", False)
-            self.set_feature("principal-search.list-all", False)
+        if not self.checker.features_checked.is_supported("get-current-user-principal"):
+            ## if we cannot get the current user principal, then we cannot perform the
+            ## search for principals.  Assume searching for principals does not work.
+            ## Arguably, the get-current-user-principal feature
+            ## could have been renamed to principal-search.
+            self.set_feature("principal-search", False)
             return
+        
+        ## Try to get the current principal first
+        principal = client.principal()
 
-        ## Test 2: Search for own principal by name
+        ## Search for own principal by name
         try:
             my_name = principal.get_display_name()
             if my_name:
                 my_principals = client.principals(name=my_name)
                 if isinstance(my_principals, list) and len(my_principals) == 1:
                     if my_principals[0].url == principal.url:
-                        self.set_feature("principal-search.by-name.self", True)
+                        self.set_feature("principal-search.by-name", True)
                     else:
-                        self.set_feature("principal-search.by-name.self", {
+                        self.set_feature("principal-search.by-name", {
                             "support": "fragile",
                             "behaviour": "Returns wrong principal"
                         })
                 elif len(my_principals) == 0:
-                    self.set_feature("principal-search.by-name.self", {
+                    self.set_feature("principal-search.by-name", {
                         "support": "unsupported",
                         "behaviour": "Search by own name returns nothing"
                     })
                 else:
-                    self.set_feature("principal-search.by-name.self", {
+                    self.set_feature("principal-search.by-name", {
                         "support": "fragile",
                         "behaviour": f"Returns {len(my_principals)} principals instead of 1"
                     })
             else:
                 ## No display name, can't test
-                self.set_feature("principal-search.by-name.self", {
+                self.set_feature("principal-search.by-name", {
                     "support": "unknown",
                     "behaviour": "No display name available to test"
                 })
         except (ReportError, DAVError, AuthorizationError) as e:
-            self.set_feature("principal-search.by-name.self", {
-                "support": "unsupported",
+            self.set_feature("principal-search.by-name", {
+                "support": "ungraceful",
                 "behaviour": f"Search by name failed: {e}"
             })
 
-        ## Test 3: List all principals
+        ## List all principals
         try:
             all_principals = client.principals()
             if isinstance(all_principals, list):
@@ -869,12 +884,12 @@ class CheckPrincipalSearch(Check):
                 self.set_feature("principal-search.list-all", True)
             else:
                 self.set_feature("principal-search.list-all", {
-                    "support": "fragile",
+                    "support": "unsupported",
                     "behaviour": "principals() didn't return a list"
                 })
         except (ReportError, DAVError, AuthorizationError) as e:
             self.set_feature("principal-search.list-all", {
-                "support": "unsupported",
+                "support": "ungraceful",
                 "behaviour": f"List all principals failed: {e}"
             })
 
@@ -901,17 +916,9 @@ class CheckDuplicateUID(Check):
         test_uid = "csc_duplicate_uid_test"
         cal2_name = "csc_duplicate_uid_cal2"
 
-        ## Pre-cleanup: remove any existing test events and calendar
-        for obj in _filter_2000(cal1.objects()):
-            if obj.icalendar_instance.walk('vevent'):
-                for event in obj.icalendar_instance.walk('vevent'):
-                    if hasattr(event, 'uid') and str(event.get('uid', '')).startswith(test_uid):
-                        obj.delete()
-                        break
-
-        ## Try to find and delete existing test calendar
+        ## Try to find and delete existing cal2 test calendar
         try:
-            for cal in self.checker.client.principal().calendars():
+            for cal in self.client.principal().calendars():
                 if cal.name == cal2_name:
                     cal.delete()
                     break
@@ -934,7 +941,7 @@ END:VCALENDAR"""
             event1 = cal1.save_object(Event, event_ical)
 
             ## Create second calendar
-            cal2 = self.checker.client.principal().make_calendar(name=cal2_name)
+            cal2 = self.client.principal().make_calendar(name=cal2_name)
 
             try:
                 ## Try to save event with same UID to second calendar
@@ -950,10 +957,10 @@ END:VCALENDAR"""
                         "behaviour": "silently-ignored"
                     })
                 elif len(events_in_cal2) == 1:
+                    assert events_in_cal2[0].component['uid'] == test_uid
                     ## Server accepted the duplicate
-                    ## Verify they are treated as separate entities
-                    events_in_cal1 = list(_filter_2000(cal1.events()))
-                    assert len(events_in_cal1) == 1
+                    ## Verify they are treated as separate entities.
+                    event1 = cal1.event_by_uid(test_uid)
 
                     ## Modify event in cal2 and verify cal1's event is unchanged
                     event2.icalendar_instance.walk('vevent')[0]['summary'] = "Modified in Cal2"
@@ -988,12 +995,7 @@ END:VCALENDAR"""
 
         finally:
             ## Cleanup test event from cal1
-            for obj in _filter_2000(cal1.objects()):
-                if obj.icalendar_instance.walk('vevent'):
-                    for event in obj.icalendar_instance.walk('vevent'):
-                        if hasattr(event, 'uid') and str(event.get('uid', '')).startswith(test_uid):
-                            obj.delete()
-                            break
+            cal1.event_by_uid(test_uid).delete()
 
 
 class CheckAlarmSearch(Check):
