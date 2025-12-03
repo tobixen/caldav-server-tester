@@ -24,6 +24,19 @@ class ServerQuirkChecker:
         self.principal = self._client_obj.principal()
         self.debug_mode = debug_mode
 
+        ## Handle search-cache delay if configured
+        search_cache_config = self._client_obj.features.is_supported("search-cache", return_type=dict)
+        if search_cache_config.get("behaviour") == "delay":
+            delay = search_cache_config.get("delay", 1)
+            ## Wrap Calendar.search with delay decorator
+            from caldav.objects import Calendar
+            if not hasattr(Calendar, '_original_search'):
+                Calendar._original_search = Calendar.search
+                def delayed_search(self, *args, **kwargs):
+                    time.sleep(delay)
+                    return Calendar._original_search(self, *args, **kwargs)
+                Calendar.search = delayed_search
+
     def check_all(self):
         classes = [
             obj

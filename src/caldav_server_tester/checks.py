@@ -270,7 +270,8 @@ class PrepareCalendar(Check):
         "save-load.event",
         "save-load.todo",
         "save-load.todo.mixed-calendar",
-        "save-load.journal"
+        "save-load.journal",
+        "search.comp-type"
     }
 
     def _run_check(self):
@@ -315,7 +316,9 @@ class PrepareCalendar(Check):
                 uid = re.search("UID:(.*)\n", largs[1]).group(1)
             if uid in object_by_uid:
                 return object_by_uid.pop(uid)
-            return cal.save_object(*largs, **kwargs)
+            ret = cal.save_object(*largs, **kwargs)
+            
+            return ret
 
         try:
             task_with_dtstart = add_if_not_existing(
@@ -330,7 +333,9 @@ class PrepareCalendar(Check):
         except:
             try:
                 tasklist = self.checker.principal.calendar(cal_id=f"{cal_id}_tasks")
-                tasklist.todos()
+                ## include_completed=True will disable lots of complex filtering
+                ## logic
+                tasklist.todos(include_completed=True)
             except:
                 tasklist = self.checker.principal.make_calendar(
                     cal_id=f"{cal_id}_tasks",
@@ -353,6 +358,15 @@ class PrepareCalendar(Check):
             self.set_feature("save-load.todo")
             self.set_feature("save-load.todo.mixed-calendar", False)
 
+        ## TODO: those three lines are OK for bedework, we will
+        ## need to investigate more if the assert breaks on other
+        ## servers.
+        if not self.checker.tasklist.todos(include_completed=True):
+            self.set_feature('search.comp-type', "broken")
+        else:
+            self.set_feature('search.comp-type')
+        assert self.checker.tasklist.todos(include_completed=True)
+        
         simple_event = add_if_not_existing(
             Event,
             summary="Simple event with a start time and an end time",
@@ -533,7 +547,7 @@ END:VCALENDAR""",
         ## deleted by accident
         assert not object_by_uid
         assert self.checker.calendar.events()
-        assert self.checker.tasklist.todos()
+        assert self.checker.tasklist.todos(include_completed=True)
 
 class SearchMixIn:
     ## Boilerplate

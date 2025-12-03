@@ -30,6 +30,11 @@ from .checker import ServerQuirkChecker
     help="Password for the caldav server",
     metavar="URL",
 )
+@click.option(
+    "--caldav-features",
+    help="Server compatibility features preset (e.g., 'bedework', 'zimbra', 'sogo')",
+    metavar="FEATURES",
+)
 # @click.option("--check-features", help="List of features to test")
 @click.option("--run-checks", help="List of checks to run", multiple=True)
 def check_server_compatibility(verbose, json, name, run_checks, **kwargs):
