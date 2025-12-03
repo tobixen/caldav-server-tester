@@ -6,6 +6,11 @@ from datetime import datetime
 from datetime import date
 from datetime import timedelta
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None
+
 from caldav.compatibility_hints import FeatureSet
 from caldav.lib.error import NotFoundError, AuthorizationError, ReportError, DAVError
 from caldav.calendarobjectresource import Event, Todo, Journal
@@ -573,6 +578,7 @@ class CheckSearch(Check, SearchMixIn):
         "search.text.case-sensitive",
         "search.text.case-insensitive",
         "search.text.substring",
+        "search.text.by-uid",
         "search.is-not-defined",
         "search.text.category",
         "search.text.category.substring",
@@ -604,10 +610,17 @@ class CheckSearch(Check, SearchMixIn):
             event=True)
 
         ## summary search is by default case sensitive
-        self.search_find_set(
-            cal, "search.text.case-sensitive", 0,
-            summary="simple event with a start time and an end time",
-            event=True)
+        ## As for now, we'll skip this test if text search was
+        ## already found not to be working.
+        ## TODO: instead, we should do two searches here, one with correct
+        ## casing and one without, and ensure the first one returns 1 element.
+        if self.checker.features_checked.is_supported("search.text"):
+            self.search_find_set(
+                cal, "search.text.case-sensitive", 0,
+                summary="simple event with a start time and an end time",
+                event=True)
+        else:
+            self.set_feature('search.text.case-sensitive", False)
 
         ## summary search, case insensitive
         searcher = CalDAVSearcher(event=True)
@@ -627,6 +640,18 @@ class CheckSearch(Check, SearchMixIn):
             cal, "search.text.substring", 1,
             summary="Simple event with a start time and",
             event=True)
+
+        ## search by UID
+        try:
+            event = cal.event_by_uid("csc_simple_event1")
+            if event and event.id == "csc_simple_event1":
+                self.set_feature("search.text.by-uid")
+            else:
+                self.set_feature("search.text.by-uid", "broken")
+        except NotFoundError:
+            self.set_feature("search.text.by-uid", "unsupported")
+        except DAVError:
+            self.set_feature("search.text.by-uid", "ungraceful")
 
         ## search.text.category
         self.search_find_set(
