@@ -5,11 +5,7 @@ from datetime import timezone
 from datetime import datetime
 from datetime import date
 from datetime import timedelta
-
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:
-    ZoneInfo = None
+from zoneinfo import ZoneInfo
 
 from caldav.compatibility_hints import FeatureSet
 from caldav.lib.error import NotFoundError, AuthorizationError, ReportError, DAVError
@@ -620,7 +616,7 @@ class CheckSearch(Check, SearchMixIn):
                 summary="simple event with a start time and an end time",
                 event=True)
         else:
-            self.set_feature('search.text.case-sensitive", False)
+            self.set_feature("search.text.case-sensitive", False)
 
         ## summary search, case insensitive
         searcher = CalDAVSearcher(event=True)
@@ -644,7 +640,7 @@ class CheckSearch(Check, SearchMixIn):
         ## search by UID
         try:
             event = cal.event_by_uid("csc_simple_event1")
-            if event and event.id == "csc_simple_event1":
+            if event and str(event.component['uid']) == "csc_simple_event1":
                 self.set_feature("search.text.by-uid")
             else:
                 self.set_feature("search.text.by-uid", "broken")
@@ -667,6 +663,7 @@ class CheckSearch(Check, SearchMixIn):
                 cal, "search.text.category.substring", 1,
                 category="eet",
                 event=True)
+        ## TODO: the try/except below may be too wide
         try:
             summary = "Simple event with a start time and"
             ## Text search with and without comptype
@@ -680,7 +677,7 @@ class CheckSearch(Check, SearchMixIn):
                     post_filter=False,
                 )
             else:
-                objects = _filter_2000(cal.search(post_filter=False))
+                objects = list(_filter_2000(cal.search(post_filter=False)))
             if len(objects) == 0 and not tswoc:
                 self.set_feature(
                     "search.comp-type-optional",
@@ -729,7 +726,7 @@ class CheckSearch(Check, SearchMixIn):
                         "description": "unexpected results from date-search without comp-type",
                     },
                 )
-        except:
+        except DAVError:
             self.set_feature("search.comp-type-optional", {"support": "ungraceful"})
 
 
@@ -1332,4 +1329,68 @@ class CheckFreeBusyQuery(Check):
             self.set_feature("freebusy-query.rfc4791", {
                 "support": "broken",
                 "behaviour": f"unexpected error during freebusy query: {e}"
+            })
+
+
+class CheckTimezone(Check):
+    """
+    Checks support for non-UTC timezone information in events.
+    
+    Tests if the server accepts events with timezone information using zoneinfo.
+    Some servers reject events with timezone data (returning 403 Forbidden).
+    Related to GitHub issue https://github.com/python-caldav/caldav/issues/372
+    """
+    
+    depends_on = {PrepareCalendar}
+    features_to_be_checked = {
+        "save-load.event.timezone",
+    }
+    
+    def _run_check(self) -> None:
+        cal = self.checker.calendar
+        
+        try:
+            ## Create an event with a non-UTC timezone (America/Los_Angeles)
+            tz = ZoneInfo("America/Los_Angeles")
+            event = cal.save_event(
+                summary="Timezone test event",
+                dtstart=datetime(2000, 6, 15, 14, 0, 0, tzinfo=tz),
+                dtend=datetime(2000, 6, 15, 15, 0, 0, tzinfo=tz),
+                uid="csc_timezone_test_event",
+            )
+            
+            ## Try to load the event back
+            event.load()
+            
+            ## Verify the event was saved correctly
+            if event.vobject_instance:
+                self.set_feature("save-load.event.timezone")
+                ## Clean up
+                try:
+                    event.delete()
+                except:
+                    pass
+            else:
+                self.set_feature("save-load.event.timezone", {
+                    "support": "broken",
+                    "behaviour": "Event with timezone was saved but could not be loaded"
+                })
+        except AuthorizationError as e:
+            ## Server rejected the event with a 403 Forbidden
+            ## This is the specific issue reported in GitHub #372
+            self.set_feature("save-load.event.timezone", {
+                "support": "unsupported",
+                "behaviour": f"Server rejected event with timezone (403 Forbidden): {e}"
+            })
+        except DAVError as e:
+            ## Other DAV error (e.g., 400 Bad Request, 500 Internal Server Error)
+            self.set_feature("save-load.event.timezone", {
+                "support": "ungraceful",
+                "behaviour": f"Server error when saving event with timezone: {e}"
+            })
+        except Exception as e:
+            ## Unexpected error
+            self.set_feature("save-load.event.timezone", {
+                "support": "broken",
+                "behaviour": f"Unexpected error during timezone test: {e}"
             })
